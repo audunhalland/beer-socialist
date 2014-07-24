@@ -19,7 +19,7 @@ type TestListItem struct {
 }
 
 func writeRaw(w http.ResponseWriter, data []byte) {
-    w.Write(data)
+	w.Write(data)
 }
 
 func writeList(w http.ResponseWriter) {
@@ -45,29 +45,29 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func jsonHandler(w http.ResponseWriter, r *http.Request) {
-    var data []byte
-    var err error
-    switch r.URL.Path {
-    case "/json/homecoord":
-        data, err = json.Marshal([2]float64{59.95, 10.75})
-    }
-    if err != nil {
-        /* some error */
-    } else {
-        w.Write(data)
-    }
+	var data []byte
+	var err error
+	switch r.URL.Path {
+	case "/json/homecoord":
+		data, err = json.Marshal([2]float64{59.95, 10.75})
+	}
+	if err != nil {
+		/* some error */
+	} else {
+		w.Write(data)
+	}
 }
 
 func installFileHandler(prefix string, fn func(http.ResponseWriter, []byte), content_type string) {
 	http.HandleFunc(prefix,
 		func(w http.ResponseWriter, r *http.Request) {
-            var filename = "./content/" + r.URL.Path[len(prefix):]
+			var filename = "./content/" + r.URL.Path[len(prefix):]
 			var data, err = ioutil.ReadFile(filename)
 
 			if err != nil {
 				http.NotFound(w, r)
 			} else {
-                w.Header().Set("Content-Type", content_type)
+				w.Header().Set("Content-Type", content_type)
 				fn(w, data)
 			}
 		})

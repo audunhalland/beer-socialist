@@ -6,24 +6,24 @@ import (
 	"fmt"
 )
 
-var init_queries = [...]string {
+var init_queries = [...]string{
 	"CREATE TABLE IF NOT EXISTS user (" +
-        "id INTEGER PRIMARY KEY, " +
-        "alias TEXT, " +
-        "login TEXT, " +
-        "email TEXT " +
-        ")",
-    "CREATE TABLE IF NOT EXISTS place (" +
-        "id INTEGER PRIMARY KEY, " +
-        "name TEXT " +
-        ")",
+		"id INTEGER PRIMARY KEY, " +
+		"alias TEXT, " +
+		"login TEXT, " +
+		"email TEXT " +
+		")",
+	"CREATE TABLE IF NOT EXISTS place (" +
+		"id INTEGER PRIMARY KEY, " +
+		"name TEXT " +
+		")",
 }
 
 func init_table(db *sql.DB, q string) {
 	res, err := db.Exec(q)
-    if err != nil {
-        fmt.Println(q, res, err)
-    }
+	if err != nil {
+		fmt.Println(q, res, err)
+	}
 }
 
 func InitDb() {
@@ -32,9 +32,9 @@ func InitDb() {
 		fmt.Println(err)
 	}
 	fmt.Println("db: %p", db)
-    for i := range init_queries {
-        init_table(db, init_queries[i])
-    }
+	for i := range init_queries {
+		init_table(db, init_queries[i])
+	}
 	fmt.Println("db init done")
-    db.Close()
+	db.Close()
 }
