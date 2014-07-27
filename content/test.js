@@ -35,3 +35,25 @@ window.onload = function() {
                   map.setView(new L.LatLng(json[0], json[1]), 11)
               })
 }
+
+function fbStatusChanged(response) {
+    console.log('fb status changed');
+    console.log(response);
+}
+
+function checkFbLoginState() {
+    FB.getLoginStatus(fbStatusChanged);
+}
+
+window.fbAsyncInit = function() {
+    FB.init({
+        appId   : '{{.FacebookAppid}}',
+        cookie  : true,
+        xfbml   : true,
+        version : 'v2.0'
+    });
+
+    FB.getLoginStatus(checkFbLoginState);
+}
+
+        

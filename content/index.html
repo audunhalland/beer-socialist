@@ -6,8 +6,9 @@
 
 <link rel="stylesheet" type="text/css" href="/style/leaflet/leaflet.css" />
 <link rel="stylesheet" type="text/css" href="/style/beer.css" />
-<script src="/script/leaflet/leaflet.js"></script>
 
+<script src="/script/leaflet/leaflet.js"></script>
+<script async src="//connect.facebook.net/en_US/sdk.js"></script>
 <script src="/script/test.js"></script>
 
 <div id="beermap">
@@ -17,4 +18,6 @@
 <li>hoho</li>
 </ul>
 </div>
+<fb:login-button scope="public_profile,email" onlogin="checkFbLoginState();">
+</fb:login-button>
 </html>

@@ -13,9 +13,33 @@ var init_queries = [...]string{
 		"login TEXT, " +
 		"email TEXT " +
 		")",
+	"CREATE TABLE IF NOT EXISTS participant (" +
+		"id INTEGER PRIMARY KEY, " +
+		"user INTEGER, " +
+		"alias TEXT, " +
+		"description TEXT, " +
+		"FOREIGN KEY(userid) REFERENCES user(id)" +
+		")",
+	"CREATE TABLE IF NOT EXISTS meeting (" +
+		"id INTEGER PRIMARY KEY, " +
+		"name TEXT, " +
+		"lat REAL, " +
+		"long REAL" +
+		")",
 	"CREATE TABLE IF NOT EXISTS place (" +
 		"id INTEGER PRIMARY KEY, " +
-		"name TEXT " +
+		"name TEXT, " +
+		"lat REAL, " +
+		"long REAL" +
+		")",
+	"CREATE TABLE IF NOT EXISTS user_review (" +
+		"id INTEGER PRIMARY KEY, " +
+		"reviewer_id INTEGER, " +
+		"reviewee_id INTEGER, " +
+		"meeting_id INTEGER, " +
+		"score INTEGER, " +
+		"FOREIGN KEY(reviewer_id) REFERENCES user(id), " +
+		"FOREIGN KEY(reviewee_id) REFERENCES user(id) " +
 		")",
 }
 

@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	//"fmt"
-	"github.com/audunhalland/tbeer"
-	"html/template"
-	"io/ioutil"
+	"github.com/audunhalland/beer-socialist"
+	htmltmpl "html/template"
 	"net/http"
 	"strconv"
+	texttmpl "text/template"
 )
 
 type Page struct {
@@ -18,28 +18,21 @@ type TestListItem struct {
 	Name string
 }
 
-func writeRaw(w http.ResponseWriter, data []byte) {
-	w.Write(data)
-}
-
+/* example how to write json data */
 func writeList(w http.ResponseWriter) {
 	len := 5
 	items := make([]TestListItem, len, len)
 	for i := range items {
 		items[i].Name = strconv.Itoa(i)
 	}
-	data, _ := json.Marshal(items)
-	w.Write(data)
-}
-
-func writeStyle(w http.ResponseWriter, data []byte) {
+	json.NewEncoder(w).Encode(items)
 }
 
 func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	default:
 		page := &Page{Title: "index"}
-		t, _ := template.ParseFiles("./content/index.html")
+		t, _ := htmltmpl.ParseFiles("./content/index.html")
 		t.Execute(w, page)
 	}
 }
@@ -58,26 +51,27 @@ func jsonHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func installFileHandler(prefix string, fn func(http.ResponseWriter, []byte), content_type string) {
+func installTemplateHandler(prefix string, content_type string) {
 	http.HandleFunc(prefix,
 		func(w http.ResponseWriter, r *http.Request) {
-			var filename = "./content/" + r.URL.Path[len(prefix):]
-			var data, err = ioutil.ReadFile(filename)
+			filename := "./content/" + r.URL.Path[len(prefix):]
+			t, err := texttmpl.ParseFiles(filename)
 
 			if err != nil {
 				http.NotFound(w, r)
 			} else {
 				w.Header().Set("Content-Type", content_type)
-				fn(w, data)
+				t.Execute(w, tbeer.GlobalEnv)
 			}
 		})
 }
 
 func main() {
+	tbeer.LoadEnv()
 	tbeer.InitDb()
 
-	installFileHandler("/script/", writeRaw, "application/javascript")
-	installFileHandler("/style/", writeRaw, "text/css")
+	installTemplateHandler("/script/", "application/javascript")
+	installTemplateHandler("/style/", "text/css")
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/json/", jsonHandler)
 	http.ListenAndServe(":8080", nil)
