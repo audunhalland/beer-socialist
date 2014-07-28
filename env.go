@@ -2,9 +2,7 @@ package tbeer
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
-	//	"text/template"
 )
 
 type Env struct {
@@ -19,5 +17,4 @@ func LoadEnv() {
 	var env Env
 	json.Unmarshal(data, &env)
 	GlobalEnv = &env
-	fmt.Println(env)
 }

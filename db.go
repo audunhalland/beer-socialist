@@ -15,22 +15,37 @@ var init_queries = [...]string{
 		")",
 	"CREATE TABLE IF NOT EXISTS participant (" +
 		"id INTEGER PRIMARY KEY, " +
-		"user INTEGER, " +
+		"userid INTEGER, " +
 		"alias TEXT, " +
 		"description TEXT, " +
 		"FOREIGN KEY(userid) REFERENCES user(id)" +
 		")",
 	"CREATE TABLE IF NOT EXISTS meeting (" +
 		"id INTEGER PRIMARY KEY, " +
+		"ownerid INTEGER, " +
 		"name TEXT, " +
-		"lat REAL, " +
-		"long REAL" +
+		"FOREIGN KEY(ownerid) REFERENCES user(id)" +
 		")",
 	"CREATE TABLE IF NOT EXISTS place (" +
 		"id INTEGER PRIMARY KEY, " +
 		"name TEXT, " +
 		"lat REAL, " +
 		"long REAL" +
+		")",
+	"CREATE TABLE IF NOT EXISTS meeting_participant (" +
+		"id INTEGER PRIMARY KEY, " +
+		"meetingid INTEGER, " +
+		"participantid INTEGER, " +
+		"FOREIGN KEY(meetingid) REFERENCES meeting(id), " +
+		"FOREIGN KEY(participantid) REFERENCES participant(id)" +
+		")",
+	// Can there be many places for one meeting?
+	"CREATE TABLE IF NOT EXISTS meeting_place (" +
+		"id INTEGER PRIMARY KEY, " +
+		"meetingid INTEGER, " +
+		"placeid INTEGER, " +
+		"FOREIGN KEY(meetingid) REFERENCES meeting(id), " +
+		"FOREIGN KEY(placeid) REFERENCES place(id)" +
 		")",
 	"CREATE TABLE IF NOT EXISTS user_review (" +
 		"id INTEGER PRIMARY KEY, " +
@@ -43,6 +58,8 @@ var init_queries = [...]string{
 		")",
 }
 
+var GlobalDB *sql.DB
+
 func init_table(db *sql.DB, q string) {
 	res, err := db.Exec(q)
 	if err != nil {
@@ -50,15 +67,26 @@ func init_table(db *sql.DB, q string) {
 	}
 }
 
-func InitDb() {
-	db, err := sql.Open("sqlite3", "./tbeer.sqlite3")
+func OpenDB() (*sql.DB, error) {
+	return sql.Open("sqlite3", "./tbeer.sqlite3")
+}
+
+func InitDB() {
+	db, err := OpenDB()
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println("db: %p", db)
 	for i := range init_queries {
 		init_table(db, init_queries[i])
 	}
-	fmt.Println("db init done")
-	db.Close()
+	GlobalDB = db
+}
+
+func IsDBEmpty() bool {
+	rows, _ := GlobalDB.Query("SELECT count(*) FROM user")
+	var count int
+	rows.Next()
+	rows.Scan(&count)
+	rows.Close()
+	return count == 0
 }
