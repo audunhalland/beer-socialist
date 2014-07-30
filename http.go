@@ -68,6 +68,10 @@ func installTemplateHandler(prefix string, content_type string) {
 func StartHttp() {
 	installTemplateHandler("/script/", "application/javascript")
 	installTemplateHandler("/style/", "text/css")
+
+	InitRestTree()
+	http.HandleFunc("/api/", HandleRestRequest)
+
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/json/", jsonHandler)
 	http.ListenAndServe(":8080", nil)
