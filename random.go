@@ -25,9 +25,12 @@ func (t *randTable) put(args ...interface{}) {
 }
 
 func (t *randTable) randId() int64 {
-	var r int
+	var r int32
 	binary.Read(rand.Reader, binary.LittleEndian, &r)
-	return t.ids[r%len(t.ids)]
+	if r < 0 {
+		r = -r
+	}
+	return t.ids[int(r)%len(t.ids)]
 }
 
 type randContext struct {
