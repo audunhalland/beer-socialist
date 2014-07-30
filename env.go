@@ -6,6 +6,10 @@ import (
 )
 
 type Env struct {
+	ServerPort     int
+	ServerSecure   bool
+	ServerCertFile string
+	ServerKeyFile  string
 	FacebookAppid  string
 	FacebookSecret string
 }

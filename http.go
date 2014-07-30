@@ -3,6 +3,7 @@ package tbeer
 import (
 	"encoding/json"
 	htmltmpl "html/template"
+	"log"
 	"net/http"
 	"strconv"
 	texttmpl "text/template"
@@ -74,5 +75,23 @@ func StartHttp() {
 
 	http.HandleFunc("/", defaultHandler)
 	http.HandleFunc("/json/", jsonHandler)
-	http.ListenAndServe(":8080", nil)
+
+	addr := ":" + strconv.FormatInt(int64(GlobalEnv.ServerPort), 10)
+	var err error
+
+	if GlobalEnv.ServerSecure {
+		log.Printf("starting secure server on %s", addr)
+		err = http.ListenAndServeTLS(
+			addr,
+			GlobalEnv.ServerCertFile,
+			GlobalEnv.ServerKeyFile,
+			nil)
+	} else {
+		log.Printf("starting non-secure server on %s", addr)
+		err = http.ListenAndServe(addr, nil)
+	}
+
+	if err != nil {
+		log.Fatal(err)
+	}
 }
