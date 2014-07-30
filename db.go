@@ -6,6 +6,39 @@ import (
 	"fmt"
 )
 
+type RowScanner interface {
+	Scan(dest ...interface{}) error
+}
+
+// In memory representation: Place
+type Place struct {
+	Name string
+	Lat  float64
+	Long float64
+}
+
+// Place loader for (name, lat, long)
+func (s *Place) LoadBasic(scanner RowScanner) error {
+	return scanner.Scan(&s.Name, &s.Lat, &s.Long)
+}
+
+type MeetingParticipant struct {
+}
+
+// In memory representation: Meeting
+type Meeting struct {
+	Owner        int64
+	Name         string
+	Place        *Place
+	Participants []MeetingParticipant
+}
+
+// Meeting loader for (ownerid, name)
+func (m *Meeting) LoadBasic(scanner RowScanner) error {
+	return scanner.Scan(&m.Owner, &m.Name)
+	//return scanner.Scan(&m.Name)
+}
+
 var init_queries = [...]string{
 	"CREATE TABLE IF NOT EXISTS user (" +
 		"id INTEGER PRIMARY KEY, " +
@@ -15,14 +48,14 @@ var init_queries = [...]string{
 		")",
 	"CREATE TABLE IF NOT EXISTS participant (" +
 		"id INTEGER PRIMARY KEY, " +
-		"userid INTEGER, " +
+		"ownerid INTEGER NOT NULL, " +
 		"alias TEXT, " +
 		"description TEXT, " +
-		"FOREIGN KEY(userid) REFERENCES user(id)" +
+		"FOREIGN KEY(ownerid) REFERENCES user(id)" +
 		")",
 	"CREATE TABLE IF NOT EXISTS meeting (" +
 		"id INTEGER PRIMARY KEY, " +
-		"ownerid INTEGER, " +
+		"ownerid INTEGER NOT NULL, " +
 		"name TEXT, " +
 		"FOREIGN KEY(ownerid) REFERENCES user(id)" +
 		")",
@@ -34,16 +67,16 @@ var init_queries = [...]string{
 		")",
 	"CREATE TABLE IF NOT EXISTS meeting_participant (" +
 		"id INTEGER PRIMARY KEY, " +
-		"meetingid INTEGER, " +
-		"participantid INTEGER, " +
+		"meetingid INTEGER NOT NULL, " +
+		"participantid INTEGER NOT NULL, " +
 		"FOREIGN KEY(meetingid) REFERENCES meeting(id), " +
 		"FOREIGN KEY(participantid) REFERENCES participant(id)" +
 		")",
 	// Can there be many places for one meeting?
 	"CREATE TABLE IF NOT EXISTS meeting_place (" +
 		"id INTEGER PRIMARY KEY, " +
-		"meetingid INTEGER, " +
-		"placeid INTEGER, " +
+		"meetingid INTEGER NOT NULL, " +
+		"placeid INTEGER NOT NULL, " +
 		"FOREIGN KEY(meetingid) REFERENCES meeting(id), " +
 		"FOREIGN KEY(placeid) REFERENCES place(id)" +
 		")",

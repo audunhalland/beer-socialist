@@ -79,8 +79,8 @@ func PopulateRandom() {
 
 	user := rc.table(iq("user", []string{"alias", "login", "email"}))
 	place := rc.table(iq("place", []string{"name", "lat", "long"}))
-	part := rc.table(iq("participant", []string{"userid", "alias", "description"}))
-	meeting := rc.table(iq("meeting", []string{"name"}))
+	part := rc.table(iq("participant", []string{"ownerid", "alias", "description"}))
+	meeting := rc.table(iq("meeting", []string{"ownerid", "name"}))
 	mpart := rc.table(iq("meeting_participant", []string{"meetingid", "participantid"}))
 	mplace := rc.table(iq("meeting_place", []string{"meetingid", "placeid"}))
 
@@ -97,7 +97,7 @@ func PopulateRandom() {
 	}
 
 	for i := 0; i < 10; i++ {
-		meeting.put("meeting name")
+		meeting.put(user.randId(), "meeting name")
 	}
 
 	for i := 0; i < 20; i++ {

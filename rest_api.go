@@ -1,58 +1,77 @@
 package tbeer
 
 import (
-	//	"database/sql"
+	"database/sql"
 	"encoding/json"
-	//"fmt"
-	"errors"
+	"fmt"
+	//"errors"
 	"net/http"
-	"strconv"
+	//"strconv"
 )
 
 func jsonError(w http.ResponseWriter, err error) {
 	json.NewEncoder(w).Encode(err.Error())
 }
 
-type defaultRestHandler struct {
+// Type of the function use to handle REST requests based on one sql statement
+type stmtRestFunc func(*DispatchContext, *sql.Stmt, http.ResponseWriter) error
+
+// A REST handler with one prepared statement and a handler function
+type stmtRestHandler struct {
 	LeafDispatcher
+	fn   stmtRestFunc
+	stmt *sql.Stmt
 }
 
-func (*defaultRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("yadayada " + strconv.FormatInt(ctx.param[0].(int64), 10)))
-}
-
-type placeRestHandler struct {
-	LeafDispatcher
-}
-
-type dbPlace struct {
-	Name string
-	Lat  float64
-	Long float64
-}
-
-func (*placeRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
-	// BUG: use precompiled statements, and a generic way of adding new rest requests
-	rows, err := GlobalDB.Query("SELECT name, lat, long FROM place WHERE id = ?", ctx.param[0])
-
+func (h *stmtRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
+	err := h.fn(ctx, h.stmt, w)
 	if err != nil {
 		jsonError(w, err)
 	}
+}
 
-	if rows.Next() {
-		dbPlace := new(dbPlace)
-		err = rows.Scan(&dbPlace.Name, &dbPlace.Lat, &dbPlace.Long)
-		json.NewEncoder(w).Encode(&dbPlace)
-		rows.Next()
+func installStmtRestHandler(pathPattern string, queryString string, fn stmtRestFunc) {
+	handler := new(stmtRestHandler)
+	var err error
+	handler.fn = fn
+	handler.stmt, err = GlobalDB.Prepare(queryString)
+	if err != nil {
+		fmt.Println(err)
 	} else {
-		jsonError(w, errors.New("not found"))
+		fmt.Println("installing ", pathPattern)
+		InstallRestHandler(pathPattern, handler)
+	}
+}
+
+// Handler for /place/:id/
+func placeHandler(ctx *DispatchContext, stmt *sql.Stmt, w http.ResponseWriter) error {
+	row := stmt.QueryRow(ctx.param[0])
+	place := new(Place)
+	if err := place.LoadBasic(row); err != nil {
+		return err
+	} else {
+		json.NewEncoder(w).Encode(place)
+		return nil
+	}
+}
+
+// Handler for /meeting/:id/
+func meetingHandler(ctx *DispatchContext, stmt *sql.Stmt, w http.ResponseWriter) error {
+	row := stmt.QueryRow(ctx.param[0])
+	meeting := new(Meeting)
+	if err := meeting.LoadBasic(row); err != nil {
+		return err
+	} else {
+		json.NewEncoder(w).Encode(meeting)
+		return nil
 	}
 }
 
 func InitRestTree() {
-	InstallRestHandler("places/:id/", new(placeRestHandler))
-	InstallRestHandler("meetings/:id/", new(defaultRestHandler))
-	InstallRestHandler("users/:id/", new(defaultRestHandler))
+	installStmtRestHandler("place/:id/",
+		"SELECT name, lat, long FROM place WHERE id = ?", placeHandler)
+	installStmtRestHandler("meeting/:id/",
+		"SELECT ownerid, name FROM meeting WHERE id = ?", meetingHandler)
 
 	debugRestTree(restTree, 0)
 }
