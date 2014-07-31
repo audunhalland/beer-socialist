@@ -1,13 +1,51 @@
 package tbeer
 
 import (
-	//sqlite3 "code.google.com/p/go-sqlite/go1/sqlite3"
 	"crypto/rand"
 	"database/sql"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"strings"
+	"time"
 )
+
+func randPos() int {
+	var r int32
+	binary.Read(rand.Reader, binary.LittleEndian, &r)
+	if r < 0 {
+		r = -r
+	}
+	return int(r)
+}
+
+func randName() string {
+	gr := [][]string{
+		[]string{"b", "c", "d", "g", "j", "k", "p", "q", "t"}, // class 0
+		[]string{"f", "h", "th", "v"},                         // class 1
+		[]string{"s"},                                         // class 2
+		[]string{"l", "n", "r", "w", "m"},                     // class 3
+		[]string{"a", "e", "i", "o", "u", "y"},                // class 4
+	}
+	// state transitions: repeat for higher chance
+	st := [][]int{
+		[]int{3, 3, 4},
+		[]int{3, 3, 4},
+		[]int{1, 4, 4},
+		[]int{3, 4, 4, 4},
+		[]int{4, 3, 3, 2, 2, 1, 1, 1, 0, 0, 0}}
+	str := ""
+	state := randPos() % 5
+	for i := 0; ; i++ {
+		chr := gr[state][randPos()%len(gr[state])]
+		str = str + chr
+		if 4+(randPos()%10) < i {
+			break
+		}
+		state = st[state][randPos()%len(st[state])]
+	}
+	return strings.ToUpper(str[:1]) + str[1:]
+}
 
 type randTable struct {
 	stmt *sql.Stmt
@@ -17,7 +55,7 @@ type randTable struct {
 func (t *randTable) put(args ...interface{}) {
 	res, err := t.stmt.Exec(args...)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	} else {
 		id, _ := res.LastInsertId()
 		t.ids = append(t.ids, id)
@@ -25,12 +63,7 @@ func (t *randTable) put(args ...interface{}) {
 }
 
 func (t *randTable) randId() int64 {
-	var r int32
-	binary.Read(rand.Reader, binary.LittleEndian, &r)
-	if r < 0 {
-		r = -r
-	}
-	return t.ids[int(r)%len(t.ids)]
+	return t.ids[randPos()%len(t.ids)]
 }
 
 type randContext struct {
@@ -73,6 +106,12 @@ func iq(table string, columns []string) string {
 		strings.Join(repeat("?", len(columns)), ",") + ")"
 }
 
+func randPeriod(base time.Time) (time.Time, time.Time) {
+	t1 := base.Add(time.Hour * time.Duration(randPos()%8760))
+	t2 := t1.Add(time.Hour * time.Duration(randPos()%720))
+	return t1, t2
+}
+
 func PopulateRandom() {
 	rc := newRandContext()
 
@@ -81,34 +120,52 @@ func PopulateRandom() {
 	rc.db.Begin()
 
 	user := rc.table(iq("user", []string{"alias", "login", "email"}))
-	place := rc.table(iq("place", []string{"name", "lat", "long"}))
+	place := rc.table(iq("place", []string{"name", "lat", "long", "radius"}))
 	part := rc.table(iq("participant", []string{"ownerid", "alias", "description"}))
-	meeting := rc.table(iq("meeting", []string{"ownerid", "name"}))
+	period := rc.table(iq("period", []string{"start", "end"}))
+	meeting := rc.table(iq("meeting", []string{"ownerid", "periodid", "placeid", "name"}))
+	avail := rc.table(iq("availability", []string{"ownerid", "partid", "placeid", "periodid", "description"}))
+	addr := rc.table(iq("address", []string{"type", "value"}))
+
 	mpart := rc.table(iq("meeting_participant", []string{"meetingid", "participantid"}))
-	mplace := rc.table(iq("meeting_place", []string{"meetingid", "placeid"}))
+	pladdr := rc.table(iq("place_address", []string{"placeid", "addressid"}))
 
-	for i := 0; i < 10; i++ {
-		user.put("yo", "login", "test@mail.com")
-	}
-
-	for i := 0; i < 10; i++ {
-		place.put("place", 59.95+(float64(i)/100.0), 10.75+(float64(i)/100.0))
-	}
-
-	for i := 0; i < 10; i++ {
-		part.put(user.randId(), "participant alias", "participant description")
-	}
-
-	for i := 0; i < 10; i++ {
-		meeting.put(user.randId(), "meeting name")
+	for i := 0; i < 20; i++ {
+		user.put(randName(), "login", "test@mail.com")
 	}
 
 	for i := 0; i < 20; i++ {
+		place.put(randName(), 59.95+(float64(i)/100.0), 10.75+(float64(i)/100.0), randPos()%10)
+	}
+
+	for i := 0; i < 20; i++ {
+		part.put(user.randId(), randName(), "my description")
+	}
+
+	now := time.Now().Round(time.Hour)
+	for i := 0; i < 20; i++ {
+		t1, t2 := randPeriod(now)
+		period.put(t1.Unix(), t2.Unix())
+	}
+
+	for i := 0; i < 20; i++ {
+		meeting.put(user.randId(), period.randId(), place.randId(), "my meeting name")
+	}
+
+	for i := 0; i < 100; i++ {
+		avail.put(user.randId(), part.randId(), place.randId(), period.randId(), "my availability reason")
+	}
+
+	for i := 0; i < 20; i++ {
+		addr.put(randPos()%5, randName())
+	}
+
+	for i := 0; i < 100; i++ {
 		mpart.put(meeting.randId(), part.randId())
 	}
 
-	for i := 0; i < 20; i++ {
-		mplace.put(meeting.randId(), place.randId())
+	for i := 0; i < 100; i++ {
+		pladdr.put(place.randId(), addr.randId())
 	}
 
 	fmt.Println("committing...")

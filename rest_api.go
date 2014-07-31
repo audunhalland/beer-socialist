@@ -14,40 +14,44 @@ func jsonError(w http.ResponseWriter, err error) {
 }
 
 // Type of the function use to handle REST requests based on one sql statement
-type stmtRestFunc func(*DispatchContext, *sql.Stmt, http.ResponseWriter) error
+type stmtRestFunc func(*DispatchContext, []*sql.Stmt, http.ResponseWriter) error
 
-// A REST handler with one prepared statement and a handler function
+// A REST handler with prepared statements and a handler function
 type stmtRestHandler struct {
 	LeafDispatcher
-	fn   stmtRestFunc
-	stmt *sql.Stmt
+	fn    stmtRestFunc
+	stmts []*sql.Stmt
 }
 
 func (h *stmtRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
-	err := h.fn(ctx, h.stmt, w)
+	err := h.fn(ctx, h.stmts, w)
 	if err != nil {
 		jsonError(w, err)
 	}
 }
 
-func installStmtRestHandler(pathPattern string, queryString string, fn stmtRestFunc) {
+func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRestFunc) {
 	handler := new(stmtRestHandler)
 	var err error
 	handler.fn = fn
-	handler.stmt, err = GlobalDB.Prepare(queryString)
-	if err != nil {
-		fmt.Println(err)
-	} else {
-		fmt.Println("installing ", pathPattern)
-		InstallRestHandler(pathPattern, handler)
+	handler.stmts = make([]*sql.Stmt, len(queryStrings))
+	for i, _ := range handler.stmts {
+		handler.stmts[i], err = GlobalDB.Prepare(queryStrings[i])
+		if err != nil {
+			fmt.Println(err)
+			return
+		} else {
+			fmt.Println("installing ", pathPattern)
+			InstallRestHandler(pathPattern, handler)
+		}
 	}
 }
 
 // Handler for /place/:id/
-func placeHandler(ctx *DispatchContext, stmt *sql.Stmt, w http.ResponseWriter) error {
-	row := stmt.QueryRow(ctx.param[0])
+func placeHandler(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+	row := stmts[0].QueryRow(ctx.param[0])
 	place := new(Place)
-	if err := place.LoadBasic(row); err != nil {
+	if err := row.Scan(place.BasicFields()...); err != nil {
 		return err
 	} else {
 		json.NewEncoder(w).Encode(place)
@@ -56,22 +60,55 @@ func placeHandler(ctx *DispatchContext, stmt *sql.Stmt, w http.ResponseWriter) e
 }
 
 // Handler for /meeting/:id/
-func meetingHandler(ctx *DispatchContext, stmt *sql.Stmt, w http.ResponseWriter) error {
-	row := stmt.QueryRow(ctx.param[0])
+func meetingHandler(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+	row := stmts[0].QueryRow(ctx.param[0])
 	meeting := new(Meeting)
-	if err := meeting.LoadBasic(row); err != nil {
+	if err := row.Scan(meeting.BasicFields()...); err != nil {
 		return err
 	} else {
 		json.NewEncoder(w).Encode(meeting)
 		return nil
 	}
+	return nil
+}
+
+// Handler for /availability/
+func availabilityHandler(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+	rows, err := stmts[0].Query(ctx.userid)
+	if err != nil {
+		return err
+	}
+	lst := make([]*Availability, 0)
+	for rows.Next() {
+		a := new(Availability)
+		err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...)
+		if err != nil {
+			return err
+		}
+		lst = append(lst, a)
+	}
+	json.NewEncoder(w).Encode(lst)
+	return nil
 }
 
 func InitRestTree() {
 	installStmtRestHandler("place/:id/",
-		"SELECT name, lat, long FROM place WHERE id = ?", placeHandler)
+		[]string{"SELECT name, lat, long, radius FROM place WHERE id = ?"}, placeHandler)
 	installStmtRestHandler("meeting/:id/",
-		"SELECT ownerid, name FROM meeting WHERE id = ?", meetingHandler)
+		[]string{"SELECT ownerid, name FROM meeting WHERE id = ?"}, meetingHandler)
+	installStmtRestHandler("availability/",
+		[]string{
+			"SELECT availability.id, availability.description," +
+				"participant.alias, participant.description, " +
+				"place.name, place.lat, place.long, place.radius, " +
+				"period.start, period.end " +
+				"FROM availability, participant, place, period " +
+				"WHERE " +
+				"availability.ownerid = ? AND " +
+				"availability.partid = participant.id AND " +
+				"availability.placeid = place.id AND " +
+				"availability.periodid = period.id"},
+		availabilityHandler)
 
 	debugRestTree(restTree, 0)
 }

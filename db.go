@@ -6,20 +6,33 @@ import (
 	"fmt"
 )
 
-type RowScanner interface {
-	Scan(dest ...interface{}) error
+// A BasicFieldContainer is something that contains
+// fields that are basic (i.e. do not point to other containers)
+type BasicFieldContainer interface {
+	// Get all fields that do not point to other containers
+	BasicFields() []interface{}
+}
+
+// Get the full concatenated list of BasicFields from the input list
+// of field containers
+func ConcatBasicFields(lst ...BasicFieldContainer) []interface{} {
+	f := make([]interface{}, 0)
+	for _, c := range lst {
+		f = append(f, c.BasicFields()...)
+	}
+	return f
 }
 
 // In memory representation: Place
 type Place struct {
-	Name string
-	Lat  float64
-	Long float64
+	Name   string
+	Lat    float64
+	Long   float64
+	Radius int
 }
 
-// Place loader for (name, lat, long)
-func (s *Place) LoadBasic(scanner RowScanner) error {
-	return scanner.Scan(&s.Name, &s.Lat, &s.Long)
+func (s *Place) BasicFields() []interface{} {
+	return []interface{}{&s.Name, &s.Lat, &s.Long, &s.Radius}
 }
 
 type MeetingParticipant struct {
@@ -33,10 +46,41 @@ type Meeting struct {
 	Participants []MeetingParticipant
 }
 
-// Meeting loader for (ownerid, name)
-func (m *Meeting) LoadBasic(scanner RowScanner) error {
-	return scanner.Scan(&m.Owner, &m.Name)
-	//return scanner.Scan(&m.Name)
+func (m *Meeting) BasicFields() []interface{} {
+	return []interface{}{&m.Owner, &m.Name}
+}
+
+// In memory representation: Availability
+type Availability struct {
+	Id          int64
+	Description string
+	Participant Participant
+	Place       Place
+	Period      Period
+}
+
+func (a *Availability) BasicFields() []interface{} {
+	return []interface{}{&a.Id, &a.Description}
+}
+
+// In memory representation: Participant
+type Participant struct {
+	Alias       string
+	Description string
+}
+
+func (p *Participant) BasicFields() []interface{} {
+	return []interface{}{&p.Alias, &p.Description}
+}
+
+// In memory representation: Period
+type Period struct {
+	Start int
+	End   int
+}
+
+func (p *Period) BasicFields() []interface{} {
+	return []interface{}{&p.Start, &p.End}
 }
 
 var init_queries = [...]string{
@@ -53,17 +97,29 @@ var init_queries = [...]string{
 		"description TEXT, " +
 		"FOREIGN KEY(ownerid) REFERENCES user(id)" +
 		")",
+	"CREATE TABLE IF NOT EXISTS period (" +
+		"id INTEGER PRIMARY KEY, " +
+		"start INTEGER, " +
+		"end INTEGER" +
+		")",
 	"CREATE TABLE IF NOT EXISTS meeting (" +
 		"id INTEGER PRIMARY KEY, " +
 		"ownerid INTEGER NOT NULL, " +
+		"periodid INTEGER NOT NULL, " +
+		"placeid INTEGER NOT NULL, " +
 		"name TEXT, " +
 		"FOREIGN KEY(ownerid) REFERENCES user(id)" +
+		"FOREIGN KEY(periodid) REFERENCES period(id)" +
 		")",
 	"CREATE TABLE IF NOT EXISTS place (" +
 		"id INTEGER PRIMARY KEY, " +
 		"name TEXT, " +
 		"lat REAL, " +
-		"long REAL" +
+		"long REAL, " +
+		// big or small? e.g.
+		// (continent > country > county > city > neighbourhood > ... > "addressable")
+		"radius INTEGER, " +
+		"timezone TEXT" +
 		")",
 	"CREATE TABLE IF NOT EXISTS meeting_participant (" +
 		"id INTEGER PRIMARY KEY, " +
@@ -72,13 +128,30 @@ var init_queries = [...]string{
 		"FOREIGN KEY(meetingid) REFERENCES meeting(id), " +
 		"FOREIGN KEY(participantid) REFERENCES participant(id)" +
 		")",
-	// Can there be many places for one meeting?
-	"CREATE TABLE IF NOT EXISTS meeting_place (" +
+	// availability - a period in which a meeting participant is available
+	"CREATE TABLE IF NOT EXISTS availability (" +
 		"id INTEGER PRIMARY KEY, " +
-		"meetingid INTEGER NOT NULL, " +
+		"ownerid INTEGER NOT NULL, " +
+		"partid INTEGER NOT NULL, " +
 		"placeid INTEGER NOT NULL, " +
-		"FOREIGN KEY(meetingid) REFERENCES meeting(id), " +
-		"FOREIGN KEY(placeid) REFERENCES place(id)" +
+		"periodid INTEGER NOT NULL, " +
+		"description TEXT, " +
+		"FOREIGN KEY(ownerid) REFERENCES meeting(user), " +
+		"FOREIGN KEY(partid) REFERENCES meeting_participant(id), " +
+		"FOREIGN KEY(placeid) REFERENCES place(id), " +
+		"FOREIGN KEY(periodid) REFERENCES period(id)" +
+		")",
+	"CREATE TABLE IF NOT EXISTS address (" +
+		"id INTEGER PRIMARY KEY, " +
+		"type INTEGER NOT NULL, " +
+		"value TEXT" +
+		")",
+	"CREATE TABLE IF NOT EXISTS place_address (" +
+		"id INTEGER PRIMARY KEY, " +
+		"placeid INTEGER NOT NULL, " +
+		"addressid INTEGER NOT NULL, " +
+		"FOREIGN KEY(placeid) REFERENCES place(id), " +
+		"FOREIGN KEY(addressid) REFERENCES address(id)" +
 		")",
 	"CREATE TABLE IF NOT EXISTS user_review (" +
 		"id INTEGER PRIMARY KEY, " +

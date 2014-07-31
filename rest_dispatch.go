@@ -9,7 +9,9 @@ import (
 )
 
 type DispatchContext struct {
-	param []interface{}
+	// userid of the dispatched request
+	userid int64
+	param  []interface{}
 }
 
 type dispatcher interface {
@@ -137,6 +139,11 @@ func HandleRestRequest(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	} else {
 		w.Header().Set("Content-Type", "application/json")
+
+		// BUG: faking the user id of the context, which would be supplied
+		// using a token in the future
+		ctx.userid = 1
+
 		handler.ServeREST(ctx, w, r)
 	}
 }
@@ -160,7 +167,7 @@ func InstallRestHandler(pathPattern string, restHandler dispatcher) {
 		parent = dp
 	}
 
-	err := parent.install("", restHandler)
+	err := parent.install(elements[len(elements)-1], restHandler)
 	if err != nil {
 		panic(err)
 	}
