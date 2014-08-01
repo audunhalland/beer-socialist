@@ -47,55 +47,34 @@ func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRe
 	}
 }
 
-// Handler for /place/:id/
-func placeHandler(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
-	row := stmts[0].QueryRow(ctx.param[0])
-	place := new(Place)
-	if err := row.Scan(place.BasicFields()...); err != nil {
-		return err
-	} else {
-		json.NewEncoder(w).Encode(place)
-		return nil
-	}
-}
-
-// Handler for /meeting/:id/
-func meetingHandler(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
-	row := stmts[0].QueryRow(ctx.param[0])
-	meeting := new(Meeting)
-	if err := row.Scan(meeting.BasicFields()...); err != nil {
-		return err
-	} else {
-		json.NewEncoder(w).Encode(meeting)
-		return nil
-	}
-	return nil
-}
-
-// Handler for /availability/
-func availabilityHandler(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
-	rows, err := stmts[0].Query(ctx.userid)
-	if err != nil {
-		return err
-	}
-	lst := make([]*Availability, 0)
-	for rows.Next() {
-		a := new(Availability)
-		err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...)
-		if err != nil {
-			return err
-		}
-		lst = append(lst, a)
-	}
-	json.NewEncoder(w).Encode(lst)
-	return nil
-}
-
 func InitRestTree() {
 	installStmtRestHandler("place/:id/",
-		[]string{"SELECT name, lat, long, radius FROM place WHERE id = ?"}, placeHandler)
+		[]string{"SELECT name, lat, long, radius FROM place WHERE id = ?"},
+		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+			row := stmts[0].QueryRow(ctx.param[0])
+			place := new(Place)
+			if err := row.Scan(place.BasicFields()...); err != nil {
+				return err
+			} else {
+				json.NewEncoder(w).Encode(place)
+				return nil
+			}
+		})
+
 	installStmtRestHandler("meeting/:id/",
-		[]string{"SELECT ownerid, name FROM meeting WHERE id = ?"}, meetingHandler)
+		[]string{"SELECT ownerid, name FROM meeting WHERE id = ?"},
+		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+			row := stmts[0].QueryRow(ctx.param[0])
+			meeting := new(Meeting)
+			if err := row.Scan(meeting.BasicFields()...); err != nil {
+				return err
+			} else {
+				json.NewEncoder(w).Encode(meeting)
+				return nil
+			}
+			return nil
+		})
+
 	installStmtRestHandler("availability/",
 		[]string{
 			"SELECT availability.id, availability.description," +
@@ -108,7 +87,23 @@ func InitRestTree() {
 				"availability.partid = participant.id AND " +
 				"availability.placeid = place.id AND " +
 				"availability.periodid = period.id"},
-		availabilityHandler)
+		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+			rows, err := stmts[0].Query(ctx.userid)
+			if err != nil {
+				return err
+			}
+			lst := make([]*Availability, 0)
+			for rows.Next() {
+				a := new(Availability)
+				err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...)
+				if err != nil {
+					return err
+				}
+				lst = append(lst, a)
+			}
+			json.NewEncoder(w).Encode(lst)
+			return nil
+		})
 
 	debugRestTree(restTree, 0)
 }
