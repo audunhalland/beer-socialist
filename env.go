@@ -2,6 +2,7 @@ package tbeer
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 )
 
@@ -17,8 +18,15 @@ type Env struct {
 var GlobalEnv *Env
 
 func LoadEnv() {
-	data, _ := ioutil.ReadFile("env.json")
+	data, err := ioutil.ReadFile("env.json")
+	if err != nil {
+		fmt.Println(err)
+	}
 	var env Env
-	json.Unmarshal(data, &env)
+	err = json.Unmarshal(data, &env)
+	if err != nil {
+		fmt.Println("Json unmarshal error in env.json:")
+		fmt.Println(err)
+	}
 	GlobalEnv = &env
 }
