@@ -48,7 +48,7 @@ func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRe
 }
 
 func InitRestTree() {
-	installStmtRestHandler("place/:id/",
+	installStmtRestHandler("place/:id",
 		[]string{"SELECT name, lat, long, radius FROM place WHERE id = ?"},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
 			row := stmts[0].QueryRow(ctx.param[0])
@@ -61,7 +61,7 @@ func InitRestTree() {
 			}
 		})
 
-	installStmtRestHandler("meeting/:id/",
+	installStmtRestHandler("meeting/:id",
 		[]string{"SELECT ownerid, name FROM meeting WHERE id = ?"},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
 			row := stmts[0].QueryRow(ctx.param[0])
@@ -75,7 +75,7 @@ func InitRestTree() {
 			return nil
 		})
 
-	installStmtRestHandler("availability/",
+	installStmtRestHandler("availability",
 		[]string{
 			"SELECT availability.id, availability.description," +
 				"participant.alias, participant.description, " +

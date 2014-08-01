@@ -67,7 +67,6 @@ func (s *selectDP) install(key string, dp dispatcher) error {
 
 // Accept the item and go to child
 func (s *acceptDP) dispatch(item string, ctx *DispatchContext) (dispatcher, error) {
-	fmt.Println("accept dispatch. child is", s.child)
 	return s.child, nil
 }
 
@@ -104,37 +103,49 @@ func (s *stringDP) dispatch(item string, ctx *DispatchContext) (dispatcher, erro
 
 var restTree = newSelectDP()
 
+// dispatch path. Path must start with a slash
 func dispatchRESTPath(path string) (RESTHandler, *DispatchContext, error) {
 	ctx := new(DispatchContext)
 	var dis dispatcher = restTree
 	remain := path
 	for dis != nil {
-		spl := strings.SplitN(remain, "/", 2)
-		next, err := dis.dispatch(spl[0], ctx)
-		if err != nil {
-			fmt.Println(err)
-			return nil, nil, err
-		} else if next == nil {
-			// now we should have a rest handler
+		if len(remain) == 0 {
 			handler, ok := dis.(RESTHandler)
 			if ok {
 				return handler, ctx, nil
 			} else {
-				return nil, nil, errors.New("no handler")
+				break
 			}
 		}
-		dis = next
-		if len(spl) > 1 {
-			remain = spl[1]
-		} else {
+
+		var err error
+		// assuming remain has initial slash
+		remain = remain[1:]
+		// locate next slash
+		slashIndex := strings.IndexRune(remain, '/')
+
+		if slashIndex == -1 {
+			// path end
+			dis, err = dis.dispatch(remain, ctx)
 			remain = ""
+		} else {
+			// split path
+			dis, err = dis.dispatch(remain[:slashIndex], ctx)
+			remain = remain[slashIndex:]
+		}
+		if err != nil {
+			return nil, nil, err
 		}
 	}
-	return nil, nil, errors.New("impossible")
+	return nil, nil, errors.New("no handler found")
 }
 
 func HandleRestRequest(w http.ResponseWriter, r *http.Request) {
-	handler, ctx, err := dispatchRESTPath(r.URL.Path[len("/api/"):])
+	restPath := r.URL.Path[len("/api"):]
+	if restPath[0] != '/' {
+		http.NotFound(w, r)
+	}
+	handler, ctx, err := dispatchRESTPath(restPath)
 	if err != nil {
 		http.NotFound(w, r)
 	} else {
