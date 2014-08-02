@@ -40,22 +40,44 @@ func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRe
 		if err != nil {
 			fmt.Println(err)
 			return
-		} else {
-			fmt.Println("installing ", pathPattern)
-			InstallRestHandler(pathPattern, handler)
 		}
 	}
+
+	fmt.Println("installing ", pathPattern)
+	InstallRestHandler(pathPattern, handler)
+}
+
+func InitRestTree() {
 }
 
 func InitRestTree() {
 	installStmtRestHandler("place/:id",
-		[]string{"SELECT name, lat, long, radius FROM place WHERE id = ?"},
+		[]string{
+			"SELECT id, name, lat, long, radius FROM place WHERE id = ?",
+			"SELECT address.type, address.value FROM address, place_address " +
+				"WHERE " +
+				"place_address.placeid = ? AND " +
+				"place_address.addressid = address.id "},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
 			row := stmts[0].QueryRow(ctx.param[0])
 			place := new(Place)
-			if err := row.Scan(place.BasicFields()...); err != nil {
+			var placeid int
+			if err := row.Scan(append([]interface{}{&placeid}, place.BasicFields()...)...); err != nil {
 				return err
 			} else {
+				addrrows, err := stmts[1].Query(placeid)
+				place.Address = make([]*Address, 0, 10)
+
+				if err != nil {
+					fmt.Println(err)
+				} else {
+					for addrrows.Next() {
+						addr := new(Address)
+						addrrows.Scan(addr.BasicFields()...)
+						place.Address = append(place.Address, addr)
+					}
+				}
+
 				json.NewEncoder(w).Encode(place)
 				return nil
 			}

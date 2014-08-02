@@ -144,18 +144,28 @@ func HandleRestRequest(w http.ResponseWriter, r *http.Request) {
 	restPath := r.URL.Path[len("/api"):]
 	if restPath[0] != '/' {
 		http.NotFound(w, r)
-	}
-	handler, ctx, err := dispatchRESTPath(restPath)
-	if err != nil {
-		http.NotFound(w, r)
 	} else {
-		w.Header().Set("Content-Type", "application/json")
+		handler, ctx, err := dispatchRESTPath(restPath)
+		if err != nil {
+			http.NotFound(w, r)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
 
-		// BUG: faking the user id of the context, which would be supplied
-		// using a token in the future
-		ctx.userid = 1
+			// BUG: faking the user id of the context, which would be supplied
+			// using a token in the future
+			ctx.userid = 1
 
-		handler.ServeREST(ctx, w, r)
+			err := r.ParseForm()
+
+			if err != nil {
+				http.Error(w, "error in form", http.StatusBadRequest)
+			} else {
+				fmt.Println("Form: ", r.Form)
+				fmt.Println("PostForm: ", r.PostForm)
+
+				handler.ServeREST(ctx, w, r)
+			}
+		}
 	}
 }
 

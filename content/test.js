@@ -12,6 +12,11 @@ function initmap() {
     map.addLayer(osm)
 }
 
+function formatdate(unix) {
+    date = new Date(unix * 1000)
+    return date.toDateString()
+}
+
 window.onload = function() {
     initmap()
 
@@ -33,6 +38,17 @@ window.onload = function() {
     $.getJSON('/json/homecoord', '',
               function(json) {
                   map.setView(new L.LatLng(json[0], json[1]), 11)
+              })
+
+    $.getJSON('/api/availability', '',
+              function(json) {
+                  for (var i = 0; i < json.length; i++) {
+                      p = json[i].Period;
+                      $("#availability").append("<li>" + json[i].Description + " " +
+                                                formatdate(p.Start) + " - " +
+                                                formatdate(p.End) +
+                                                "</li>")
+                  }
               })
 }
 

@@ -25,10 +25,11 @@ func ConcatBasicFields(lst ...BasicFieldContainer) []interface{} {
 
 // In memory representation: Place
 type Place struct {
-	Name   string
-	Lat    float64
-	Long   float64
-	Radius int
+	Name    string
+	Lat     float64
+	Long    float64
+	Radius  int
+	Address []*Address
 }
 
 func (s *Place) BasicFields() []interface{} {
@@ -81,6 +82,15 @@ type Period struct {
 
 func (p *Period) BasicFields() []interface{} {
 	return []interface{}{&p.Start, &p.End}
+}
+
+type Address struct {
+	Type  int
+	Value string
+}
+
+func (a *Address) BasicFields() []interface{} {
+	return []interface{}{&a.Type, &a.Value}
 }
 
 var init_queries = [...]string{
