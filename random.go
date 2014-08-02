@@ -19,6 +19,11 @@ func randPos() int {
 	return int(r)
 }
 
+func randFrac() float64 {
+	i := randPos()
+	return float64(i) / float64(0x7fffffff)
+}
+
 func randName() string {
 	gr := [][]string{
 		[]string{"b", "c", "d", "g", "j", "k", "p", "q", "t"}, // class 0
@@ -134,8 +139,10 @@ func PopulateRandom() {
 		user.put(randName(), "login", "test@mail.com")
 	}
 
-	for i := 0; i < 20; i++ {
-		place.put(randName(), 59.95+(float64(i)/100.0), 10.75+(float64(i)/100.0), randPos()%10)
+	for i := 0; i < 50; i++ {
+		baseLat := 59.95
+		baseLong := 10.75
+		place.put(randName(), baseLat+(randFrac()-0.5)/10.0, baseLong+((randFrac()-0.5)/5.0), randPos()%10)
 	}
 
 	for i := 0; i < 20; i++ {

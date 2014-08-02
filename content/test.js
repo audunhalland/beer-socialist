@@ -8,7 +8,6 @@ function initmap() {
     var osmAttrib = 'Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
 
     var osm = new L.TileLayer(osmUrl, {minZoom : 8, maxZoom : 20, attribution : osmAttrib});
-    //map.setView(new L.LatLng(51.3, 0.7), 9);
     map.addLayer(osm)
 }
 
@@ -42,14 +41,29 @@ window.onload = function() {
 
     $.getJSON('/api/availability', '',
               function(json) {
+                  av = $("#availability")
                   for (var i = 0; i < json.length; i++) {
                       p = json[i].Period;
-                      $("#availability").append("<li>" + json[i].Description + " " +
-                                                formatdate(p.Start) + " - " +
-                                                formatdate(p.End) +
-                                                "</li>")
+                      li = document.createElement("li")
+                      li.appendChild(document.createTextNode(
+                          json[i].Description + " " +
+                              formatdate(p.Start) + " - " +
+                              formatdate(p.End)))
+                      av.append(li)
                   }
               })
+
+    // populate the map
+    $.getJSON('/api/places', '',
+              function(json) {
+                  for (var i = 0; i < json.length; i++) {
+                      p = json[i]
+                      m = new L.Marker(new L.LatLng(p.Lat, p.Long))
+                      map.addLayer(m)
+                      m.bindPopup(p.Name)
+                  }
+              }
+              )
 }
 
 function fbStatusChanged(response) {

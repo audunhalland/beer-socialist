@@ -48,9 +48,6 @@ func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRe
 }
 
 func InitRestTree() {
-}
-
-func InitRestTree() {
 	installStmtRestHandler("place/:id",
 		[]string{
 			"SELECT id, name, lat, long, radius FROM place WHERE id = ?",
@@ -81,6 +78,26 @@ func InitRestTree() {
 				json.NewEncoder(w).Encode(place)
 				return nil
 			}
+		})
+
+	installStmtRestHandler("places",
+		[]string{
+			"SELECT name, lat, long, radius FROM place WHERE " +
+				"lat > ? AND lat < ? AND long > ? AND long < ?"},
+		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+			rows, err := stmts[0].Query(-90, 90, -180, 180)
+			if err != nil {
+				return err
+			}
+			places := make([]*Place, 0, 20)
+			for rows.Next() {
+				place := new(Place)
+				rows.Scan(place.BasicFields()...)
+				places = append(places, place)
+			}
+
+			json.NewEncoder(w).Encode(places)
+			return nil
 		})
 
 	installStmtRestHandler("meeting/:id",
