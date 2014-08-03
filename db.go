@@ -41,14 +41,16 @@ type MeetingParticipant struct {
 
 // In memory representation: Meeting
 type Meeting struct {
+	Id           int64
 	Owner        int64
 	Name         string
-	Place        *Place
+	Place        Place
+	Period       Period
 	Participants []MeetingParticipant
 }
 
 func (m *Meeting) BasicFields() []interface{} {
-	return []interface{}{&m.Owner, &m.Name}
+	return []interface{}{&m.Id, &m.Owner, &m.Name}
 }
 
 // In memory representation: Availability
@@ -132,11 +134,12 @@ var init_queries = [...]string{
 		"timezone TEXT" +
 		")",
 	"CREATE TABLE IF NOT EXISTS meeting_participant (" +
-		"id INTEGER PRIMARY KEY, " +
 		"meetingid INTEGER NOT NULL, " +
 		"participantid INTEGER NOT NULL, " +
 		"FOREIGN KEY(meetingid) REFERENCES meeting(id), " +
-		"FOREIGN KEY(participantid) REFERENCES participant(id)" +
+		"FOREIGN KEY(participantid) REFERENCES participant(id), " +
+		"PRIMARY KEY(meetingid, participantid)" +
+		//") WITHOUT ROWID", requires sqlite version 3.8.2
 		")",
 	// availability - a period in which a meeting participant is available
 	"CREATE TABLE IF NOT EXISTS availability (" +
@@ -157,11 +160,12 @@ var init_queries = [...]string{
 		"value TEXT" +
 		")",
 	"CREATE TABLE IF NOT EXISTS place_address (" +
-		"id INTEGER PRIMARY KEY, " +
 		"placeid INTEGER NOT NULL, " +
 		"addressid INTEGER NOT NULL, " +
 		"FOREIGN KEY(placeid) REFERENCES place(id), " +
-		"FOREIGN KEY(addressid) REFERENCES address(id)" +
+		"FOREIGN KEY(addressid) REFERENCES address(id), " +
+		"PRIMARY KEY(placeid, addressid) " +
+		//") WITHOUT ROWID", requires sqlite version 3.8.2
 		")",
 	"CREATE TABLE IF NOT EXISTS user_review (" +
 		"id INTEGER PRIMARY KEY, " +

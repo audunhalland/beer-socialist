@@ -101,7 +101,7 @@ func InitRestTree() {
 		})
 
 	installStmtRestHandler("meeting/:id",
-		[]string{"SELECT ownerid, name FROM meeting WHERE id = ?"},
+		[]string{"SELECT id, ownerid, name FROM meeting WHERE id = ?"},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
 			row := stmts[0].QueryRow(ctx.param[0])
 			meeting := new(Meeting)
@@ -139,6 +139,38 @@ func InitRestTree() {
 					return err
 				}
 				lst = append(lst, a)
+			}
+			json.NewEncoder(w).Encode(lst)
+			return nil
+		})
+
+	installStmtRestHandler("meetings",
+		[]string{
+			"SELECT meeting.id, meeting.ownerid, meeting.name, " +
+				"place.name, place.lat, place.long, place.radius, " +
+				"period.start, period.end, " +
+				"participant.id " +
+				"FROM meeting, place, period, meeting_participant, participant " +
+				"WHERE " +
+				"participant.ownerid = ? AND " +
+				"meeting_participant.participantid = participant.id AND " +
+				"meeting_participant.meetingid = meeting.id AND " +
+				"meeting.placeid = place.id AND " +
+				"meeting.periodid = period.id"},
+		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+			rows, err := stmts[0].Query(ctx.userid)
+			if err != nil {
+				return err
+			}
+			lst := make([]*Meeting, 0)
+			for rows.Next() {
+				m := new(Meeting)
+				var partid int
+				err := rows.Scan(append(ConcatBasicFields(m, &m.Place, &m.Period), &partid)...)
+				if err != nil {
+					return err
+				}
+				lst = append(lst, m)
 			}
 			json.NewEncoder(w).Encode(lst)
 			return nil

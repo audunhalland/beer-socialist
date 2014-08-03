@@ -1,6 +1,7 @@
 package tbeer
 
 import (
+	"code.google.com/p/go-sqlite/go1/sqlite3"
 	"crypto/rand"
 	"database/sql"
 	"encoding/binary"
@@ -22,6 +23,15 @@ func randPos() int {
 func randFrac() float64 {
 	i := randPos()
 	return float64(i) / float64(0x7fffffff)
+}
+
+func errCode(e error) int {
+	switch err := e.(type) {
+	case *sqlite3.Error:
+		return err.Code()
+	default:
+		return sqlite3.OK
+	}
 }
 
 func randName() string {
@@ -57,6 +67,7 @@ type randTable struct {
 	ids  []int64
 }
 
+// Put data into table and store the id
 func (t *randTable) put(args ...interface{}) {
 	res, err := t.stmt.Exec(args...)
 	if err != nil {
@@ -65,6 +76,12 @@ func (t *randTable) put(args ...interface{}) {
 		id, _ := res.LastInsertId()
 		t.ids = append(t.ids, id)
 	}
+}
+
+// Put data into table, tolerate errors. Does not store id
+func (t *randTable) tryPut(args ...interface{}) error {
+	_, err := t.stmt.Exec(args...)
+	return err
 }
 
 func (t *randTable) randId() int64 {
@@ -168,11 +185,27 @@ func PopulateRandom() {
 	}
 
 	for i := 0; i < 100; i++ {
-		mpart.put(meeting.randId(), part.randId())
+		err := mpart.tryPut(meeting.randId(), part.randId())
+		switch errCode(err) {
+		case 2067:
+			i--
+		case 0:
+			continue
+		default:
+			log.Fatal(err)
+		}
 	}
 
 	for i := 0; i < 100; i++ {
-		pladdr.put(place.randId(), addr.randId())
+		err := pladdr.tryPut(place.randId(), addr.randId())
+		switch errCode(err) {
+		case 2067:
+			i--
+		case 0:
+			continue
+		default:
+			log.Fatal(err)
+		}
 	}
 
 	fmt.Println("committing...")
