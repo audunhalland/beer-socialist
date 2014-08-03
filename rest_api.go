@@ -4,12 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	//"errors"
+	"io"
 	"net/http"
-	//"strconv"
 )
 
-func jsonError(w http.ResponseWriter, err error) {
+const queueBufferSize = 0
+
+func jsonError(w io.Writer, err error) {
 	json.NewEncoder(w).Encode(err.Error())
 }
 
@@ -24,6 +25,35 @@ func compileStatements(q []string) ([]*sql.Stmt, error) {
 		}
 	}
 	return stmts, nil
+}
+
+// Write a json list of objects read from a queue
+func writeJSONList(w io.Writer, queue <-chan interface{}) {
+	enc := json.NewEncoder(w)
+	e, ok := <-queue
+
+	if ok {
+		switch item := e.(type) {
+		case error:
+			// error on the first item; don't write a list
+			// but some representation of the error.
+			// BUG: string for now
+			enc.Encode("error: " + item.Error())
+		default:
+			w.Write([]byte("["))
+			enc.Encode(item)
+
+			for e = range queue {
+				w.Write([]byte(","))
+				enc.Encode(e)
+			}
+
+			w.Write([]byte("]"))
+		}
+	} else {
+		// no items
+		w.Write([]byte("[]"))
+	}
 }
 
 // Type of the function use to handle REST requests based on one sql statement
@@ -54,7 +84,7 @@ func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRe
 	}
 }
 
-// Type of the function use to handle REST requests based on one sql statement
+// Function type for api calls returning a list of objects
 type producer func(*DispatchContext, []*sql.Stmt, chan<- interface{}) error
 
 // A REST handler with prepared statements and a producer function
@@ -65,7 +95,7 @@ type queueRestHandler struct {
 }
 
 func (h *queueRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
-	queue := make(chan interface{})
+	queue := make(chan interface{}, queueBufferSize)
 
 	go func() {
 		err := h.prod(ctx, h.stmts, queue)
@@ -78,6 +108,7 @@ func (h *queueRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter
 	writeJSONList(w, queue)
 }
 
+// Install an api call that returns a list of objects, using a queue implemented with a channel
 func installQueueHandler(pathPattern string, queryStrings []string, fn producer) {
 	handler := new(queueRestHandler)
 	var err error
@@ -86,31 +117,6 @@ func installQueueHandler(pathPattern string, queryStrings []string, fn producer)
 
 	if err == nil {
 		InstallRestHandler(pathPattern, handler)
-	}
-}
-
-func writeJSONList(w http.ResponseWriter, queue <-chan interface{}) {
-	enc := json.NewEncoder(w)
-	e, ok := <-queue
-
-	if ok {
-		switch item := e.(type) {
-		case error:
-			enc.Encode("error: " + item.Error())
-		default:
-			w.Write([]byte("["))
-			enc.Encode(item)
-
-			for e = range queue {
-				w.Write([]byte(","))
-				enc.Encode(e)
-			}
-
-			w.Write([]byte("]"))
-		}
-	} else {
-		// empty list?
-		w.Write([]byte("[]"))
 	}
 }
 
@@ -160,10 +166,9 @@ func InitRestTree() {
 				place := new(Place)
 				err := rows.Scan(place.BasicFields()...)
 				if err != nil {
-					queue <- err
-				} else {
-					queue <- place
+					return err
 				}
+				queue <- place
 			}
 			return nil
 		})
@@ -182,7 +187,7 @@ func InitRestTree() {
 			return nil
 		})
 
-	installStmtRestHandler("availability",
+	installQueueHandler("availability",
 		[]string{
 			"SELECT availability.id, availability.description," +
 				"participant.alias, participant.description, " +
@@ -194,21 +199,19 @@ func InitRestTree() {
 				"availability.partid = participant.id AND " +
 				"availability.placeid = place.id AND " +
 				"availability.periodid = period.id"},
-		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
 			rows, err := stmts[0].Query(ctx.userid)
 			if err != nil {
 				return err
 			}
-			lst := make([]*Availability, 0)
 			for rows.Next() {
 				a := new(Availability)
 				err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...)
 				if err != nil {
 					return err
 				}
-				lst = append(lst, a)
+				queue <- a
 			}
-			json.NewEncoder(w).Encode(lst)
 			return nil
 		})
 
@@ -235,13 +238,10 @@ func InitRestTree() {
 				var partid int
 				err := rows.Scan(append(ConcatBasicFields(m, &m.Place, &m.Period), &partid)...)
 				if err != nil {
-					queue <- err
-				} else {
-					queue <- m
+					return err
 				}
+				queue <- m
 			}
 			return nil
 		})
-
-	debugRestTree(restTree, 0)
 }

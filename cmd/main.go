@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/audunhalland/beer-socialist"
+	"runtime"
 )
 
 func main() {
@@ -11,6 +12,8 @@ func main() {
 	if tbeer.IsDBEmpty() {
 		tbeer.PopulateRandom()
 	}
+
+	runtime.GOMAXPROCS(runtime.NumCPU() - 2)
 
 	tbeer.StartHttp()
 }
