@@ -188,6 +188,7 @@ func InstallRestHandler(pathPattern string, restHandler dispatcher) {
 		parent = dp
 	}
 
+	fmt.Println("installing ", pathPattern)
 	err := parent.install(elements[len(elements)-1], restHandler)
 	if err != nil {
 		panic(err)
