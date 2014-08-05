@@ -11,6 +11,7 @@ type Env struct {
 	ServerSecure   bool
 	ServerCertFile string
 	ServerKeyFile  string
+	GoogleAPIKey   string
 	FacebookAppid  string
 	FacebookSecret string
 }

@@ -27,35 +27,6 @@ func compileStatements(q []string) ([]*sql.Stmt, error) {
 	return stmts, nil
 }
 
-// Write a json list of objects read from a queue
-func writeJSONList(w io.Writer, queue <-chan interface{}) {
-	enc := json.NewEncoder(w)
-	e, ok := <-queue
-
-	if ok {
-		switch item := e.(type) {
-		case error:
-			// error on the first item; don't write a list
-			// but some representation of the error.
-			// BUG: string for now
-			enc.Encode("error: " + item.Error())
-		default:
-			w.Write([]byte("["))
-			enc.Encode(item)
-
-			for e = range queue {
-				w.Write([]byte(","))
-				enc.Encode(e)
-			}
-
-			w.Write([]byte("]"))
-		}
-	} else {
-		// no items
-		w.Write([]byte("[]"))
-	}
-}
-
 // Type of the function use to handle REST requests based on one sql statement
 type stmtRestFunc func(*DispatchContext, []*sql.Stmt, http.ResponseWriter) error
 
@@ -88,31 +59,52 @@ func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRe
 type producer func(*DispatchContext, []*sql.Stmt, chan<- interface{}) error
 
 // A REST handler with prepared statements and a producer function
-type queueRestHandler struct {
+type streamRestHandler struct {
 	LeafDispatcher
-	prod  producer
-	stmts []*sql.Stmt
+	elements []interface{}
+	stmts    []*sql.Stmt
 }
 
-func (h *queueRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
+func makeProdQueue(ctx *DispatchContext, stmts []*sql.Stmt, p producer) <-chan interface{} {
 	queue := make(chan interface{}, queueBufferSize)
 
 	go func() {
-		err := h.prod(ctx, h.stmts, queue)
+		err := p(ctx, stmts, queue)
 		if err != nil {
 			queue <- err
 		}
 		close(queue)
 	}()
 
-	writeJSONList(w, queue)
+	return queue
+}
+
+func (h *streamRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
+	mappedElements := make([]interface{}, len(h.elements))
+
+	for i, e := range h.elements {
+		switch element := e.(type) {
+		case func(*DispatchContext, []*sql.Stmt, chan<- interface{}) error:
+			mappedElements[i] = makeProdQueue(ctx, h.stmts, element)
+		default:
+			mappedElements[i] = element
+		}
+	}
+
+	err := StreamEncodeJSON(w, mappedElements)
+
+	if err != nil {
+		jsonError(w, err)
+	}
 }
 
 // Install an api call that returns a list of objects, using a queue implemented with a channel
-func installQueueHandler(pathPattern string, queryStrings []string, fn producer) {
-	handler := new(queueRestHandler)
+// Stream elements is a list of elements to encode in the json stream.
+// If an element is a "producer" function, it will translate into a channel for list encoding
+func installStreamHandler(pathPattern string, queryStrings []string, streamElements ...interface{}) {
+	handler := new(streamRestHandler)
 	var err error
-	handler.prod = fn
+	handler.elements = streamElements
 	handler.stmts, err = compileStatements(queryStrings)
 
 	if err == nil {
@@ -153,7 +145,7 @@ func InitRestTree() {
 			}
 		})
 
-	installQueueHandler("places",
+	installStreamHandler("places",
 		[]string{
 			"SELECT name, lat, long, radius FROM place WHERE " +
 				"lat > ? AND lat < ? AND long > ? AND long < ?"},
@@ -187,7 +179,7 @@ func InitRestTree() {
 			return nil
 		})
 
-	installQueueHandler("availability",
+	installStreamHandler("availability",
 		[]string{
 			"SELECT availability.id, availability.description," +
 				"participant.alias, participant.description, " +
@@ -215,7 +207,7 @@ func InitRestTree() {
 			return nil
 		})
 
-	installQueueHandler("meetings",
+	installStreamHandler("meetings",
 		[]string{
 			"SELECT meeting.id, meeting.ownerid, meeting.name, " +
 				"place.name, place.lat, place.long, place.radius, " +
@@ -244,4 +236,35 @@ func InitRestTree() {
 			}
 			return nil
 		})
+
+	installStreamHandler("placesearch",
+		[]string{"SELECT name, id FROM place WHERE name LIKE ?"},
+		[]byte(`{"suggestions":`),
+		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
+			type Suggestion struct {
+				Value string `json:"value"`
+				Data  int64  `json:"data"`
+			}
+			q, ok := ctx.request.Form["query"]
+			if !ok {
+				return fmt.Errorf("no query")
+			}
+
+			rows, err := stmts[0].Query("%" + q[0] + "%")
+
+			if err != nil {
+				return err
+			}
+
+			for rows.Next() {
+				s := new(Suggestion)
+				err := rows.Scan(&s.Value, &s.Data)
+				if err != nil {
+					return err
+				}
+				queue <- s
+			}
+			return nil
+		},
+		[]byte("}"))
 }

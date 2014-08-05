@@ -10,8 +10,9 @@ import (
 
 type DispatchContext struct {
 	// userid of the dispatched request
-	userid int64
-	param  []interface{}
+	userid  int64
+	param   []interface{}
+	request *http.Request
 }
 
 type dispatcher interface {
@@ -160,9 +161,7 @@ func HandleRestRequest(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				http.Error(w, "error in form", http.StatusBadRequest)
 			} else {
-				fmt.Println("Form: ", r.Form)
-				fmt.Println("PostForm: ", r.PostForm)
-
+				ctx.request = r
 				handler.ServeREST(ctx, w, r)
 			}
 		}

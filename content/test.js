@@ -19,21 +19,6 @@ function formatdate(unix) {
 window.onload = function() {
     initmap()
 
-    /*
-    window.setInterval(function() {
-        console.log("hehe")
-        $.getJSON("/list",
-                  "",
-                  function(json) {
-                      console.log(json)
-                      for (var i = 0; i < json.length; i++) {
-                          console.log(json[i])
-                          $("#dynamiclist").append("<li>" + json[i].Name + "</li>")
-                      }
-                  })
-    }, 1000)
-    */
-
     $.getJSON('/json/homecoord', '',
               function(json) {
                   map.setView(new L.LatLng(json[0], json[1]), 11)
@@ -64,6 +49,8 @@ window.onload = function() {
                   }
               }
               )
+
+    $("#placesearch").autocomplete({serviceUrl: "/api/placesearch"})
 }
 
 function fbStatusChanged(response) {

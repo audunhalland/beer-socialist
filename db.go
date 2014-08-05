@@ -176,6 +176,11 @@ var init_queries = [...]string{
 		"FOREIGN KEY(reviewer_id) REFERENCES user(id), " +
 		"FOREIGN KEY(reviewee_id) REFERENCES user(id) " +
 		")",
+	"CREATE TABLE IF NOT EXISTS dynamic_url (" +
+		"value TEXT PRIMARY KEY NOT NULL, " +
+		"type INTEGER NOT NULL, " +
+		"foreignid INTEGER NOT NULL, " +
+		")",
 }
 
 var GlobalDB *sql.DB
