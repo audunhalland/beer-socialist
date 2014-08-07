@@ -25,6 +25,7 @@ func ConcatBasicFields(lst ...BasicFieldContainer) []interface{} {
 
 // In memory representation: Place
 type Place struct {
+	Id      int64
 	Name    string
 	Lat     float64
 	Long    float64
@@ -33,7 +34,7 @@ type Place struct {
 }
 
 func (s *Place) BasicFields() []interface{} {
-	return []interface{}{&s.Name, &s.Lat, &s.Long, &s.Radius}
+	return []interface{}{&s.Id, &s.Name, &s.Lat, &s.Long, &s.Radius}
 }
 
 type MeetingParticipant struct {

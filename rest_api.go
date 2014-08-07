@@ -6,9 +6,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 )
 
 const queueBufferSize = 0
+
+type Rectangle struct {
+	MinLat  float64
+	MinLong float64
+	MaxLat  float64
+	MaxLong float64
+}
 
 func jsonError(w io.Writer, err error) {
 	json.NewEncoder(w).Encode(err.Error())
@@ -112,6 +121,33 @@ func installStreamHandler(pathPattern string, queryStrings []string, streamEleme
 	}
 }
 
+func getFormFloat(m url.Values, key string) (float64, error) {
+	val, ok := m[key]
+	if !ok {
+		return 0.0, fmt.Errorf("missing key %s", key)
+	}
+	f, err := strconv.ParseFloat(val[0], 64)
+	if err != nil {
+		return 0.0, err
+	} else {
+		return f, nil
+	}
+}
+
+func getRectangle(ctx *DispatchContext) (*Rectangle, error) {
+	r := new(Rectangle)
+	var err error
+	keys := []string{"minlat", "minlong", "maxlat", "maxlong"}
+	targets := []*float64{&r.MinLat, &r.MinLong, &r.MaxLat, &r.MaxLong}
+	for i, t := range targets {
+		*t, err = getFormFloat(ctx.request.Form, keys[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return r, nil
+}
+
 func InitRestTree() {
 	installStmtRestHandler("place/:id",
 		[]string{
@@ -123,11 +159,10 @@ func InitRestTree() {
 		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
 			row := stmts[0].QueryRow(ctx.param[0])
 			place := new(Place)
-			var placeid int
-			if err := row.Scan(append([]interface{}{&placeid}, place.BasicFields()...)...); err != nil {
+			if err := row.Scan(place.BasicFields()...); err != nil {
 				return err
 			} else {
-				addrrows, err := stmts[1].Query(placeid)
+				addrrows, err := stmts[1].Query(place.Id)
 				place.Address = make([]*Address, 0, 10)
 
 				if err != nil {
@@ -147,10 +182,14 @@ func InitRestTree() {
 
 	installStreamHandler("places",
 		[]string{
-			"SELECT name, lat, long, radius FROM place WHERE " +
+			"SELECT id, name, lat, long, radius FROM place WHERE " +
 				"lat > ? AND lat < ? AND long > ? AND long < ?"},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
-			rows, err := stmts[0].Query(-90, 90, -180, 180)
+			rect, err := getRectangle(ctx)
+			if err != nil {
+				return err
+			}
+			rows, err := stmts[0].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
 			if err != nil {
 				return err
 			}
@@ -183,7 +222,7 @@ func InitRestTree() {
 		[]string{
 			"SELECT availability.id, availability.description," +
 				"participant.alias, participant.description, " +
-				"place.name, place.lat, place.long, place.radius, " +
+				"place.id, place.name, place.lat, place.long, place.radius, " +
 				"period.start, period.end " +
 				"FROM availability, participant, place, period " +
 				"WHERE " +
@@ -210,7 +249,7 @@ func InitRestTree() {
 	installStreamHandler("meetings",
 		[]string{
 			"SELECT meeting.id, meeting.ownerid, meeting.name, " +
-				"place.name, place.lat, place.long, place.radius, " +
+				"place.id, place.name, place.lat, place.long, place.radius, " +
 				"period.start, period.end, " +
 				"participant.id " +
 				"FROM meeting, place, period, meeting_participant, participant " +
