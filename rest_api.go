@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -19,7 +18,8 @@ type Rectangle struct {
 	MaxLong float64
 }
 
-func jsonError(w io.Writer, err error) {
+func jsonError(w http.ResponseWriter, err error) {
+	w.WriteHeader(400)
 	json.NewEncoder(w).Encode(err.Error())
 }
 

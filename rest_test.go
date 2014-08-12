@@ -2,7 +2,6 @@ package tbeer
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,12 +20,14 @@ func TestRestGetError(t *testing.T) {
 		expect string
 	}
 	l := []Expect{
-		{"place/1", "yo"},
-		{"places", "yo"},
-		{"meeting/1", "yo"},
-		{"availability", "yo"},
-		{"meetings", "yo"},
-		{"placesearch", "yo"}}
+		{"place/1", "dict"},
+		{"places", "error"}, /* missing bounding box */
+		{"places?minlat=0&minlong=0&maxlat=0&maxlong=0", "list"},
+		{"meeting/1", "dict"},
+		{"availability", "list"},
+		{"meetings", "list"},
+		{"placesearch", "error"},        /* missing query */
+		{"placesearch?query=a", "dict"}} /* missing query */
 
 	OpenTestEnv()
 	defer CloseTestEnv()
@@ -39,11 +40,15 @@ func TestRestGetError(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		} else if res.StatusCode != 200 {
-			t.Errorf("got status %d for request %s", res.StatusCode, url)
+			if item.expect != "error" {
+				buf := &bytes.Buffer{}
+				buf.ReadFrom(res.Body)
+				t.Errorf("got unexpected status %d for request %s. Response: %s", res.StatusCode, url, buf.String())
+			}
 		} else {
 			buf := &bytes.Buffer{}
 			buf.ReadFrom(res.Body)
-			fmt.Println(buf.String())
+			t.Logf("rest call OK: %s", url)
 		}
 	}
 }
