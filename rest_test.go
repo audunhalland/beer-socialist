@@ -39,12 +39,10 @@ func TestRestGetError(t *testing.T) {
 		res, err := http.Get(url)
 		if err != nil {
 			t.Error(err)
-		} else if res.StatusCode != 200 {
-			if item.expect != "error" {
-				buf := &bytes.Buffer{}
-				buf.ReadFrom(res.Body)
-				t.Errorf("got unexpected status %d for request %s. Response: %s", res.StatusCode, url, buf.String())
-			}
+		} else if res.StatusCode != 200 && item.expect != "error" {
+			buf := &bytes.Buffer{}
+			buf.ReadFrom(res.Body)
+			t.Errorf("got unexpected status %d for request %s. Response: %s", res.StatusCode, url, buf.String())
 		} else {
 			buf := &bytes.Buffer{}
 			buf.ReadFrom(res.Body)
