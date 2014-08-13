@@ -25,6 +25,7 @@ func ConcatBasicFields(lst ...BasicFieldContainer) []interface{} {
 
 // In memory representation: Place
 type Place struct {
+	Type    string /* BUG: for json */
 	Id      int64
 	Name    string
 	Lat     float64
@@ -42,6 +43,7 @@ type MeetingParticipant struct {
 
 // In memory representation: Meeting
 type Meeting struct {
+	Type         string /* BUG: for json */
 	Id           int64
 	Owner        int64
 	Name         string
@@ -56,6 +58,7 @@ func (m *Meeting) BasicFields() []interface{} {
 
 // In memory representation: Availability
 type Availability struct {
+	Type        string /* BUG: for json */
 	Id          int64
 	Description string
 	Participant Participant

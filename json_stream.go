@@ -6,14 +6,24 @@ import (
 	"io"
 )
 
+// KeyedItem is used in interface channels to signify that something
+// is to be part of a json dictionary instead of a list.
 type KeyedItem struct {
 	key   string
 	value interface{}
 }
 
-type EmptyList struct{}
+// EmptyDictionary is the only way to send an empty dictionary
+// over a channel.
 type EmptyDictionary struct{}
 
+// A value of this instance indicates an empty list.
+// It's here for completeness and not strictly needed,
+// because a closed channel with no objects sent
+// is an empty list by default
+type EmptyList struct{}
+
+// Encode any value as json
 func encodeItem(w io.Writer, o interface{}) error {
 	bytes, err := json.Marshal(o)
 	if err != nil {
@@ -24,6 +34,7 @@ func encodeItem(w io.Writer, o interface{}) error {
 	}
 }
 
+// Encode one dictionary item (KeyedItem)
 func encodeDictionaryItem(w io.Writer, o interface{}) error {
 	switch ot := o.(type) {
 	case *KeyedItem:
@@ -44,7 +55,8 @@ func encodeDictionaryItem(w io.Writer, o interface{}) error {
 	}
 }
 
-func concatQueue(w io.Writer, queue <-chan interface{}, encode func(w io.Writer, o interface{}) error) {
+// Output all collection items preceded by comma
+func appendCollectionItems(w io.Writer, queue <-chan interface{}, encode func(w io.Writer, o interface{}) error) {
 	for e := range queue {
 		w.Write([]byte(","))
 		if encode(w, e) != nil {
@@ -53,6 +65,7 @@ func concatQueue(w io.Writer, queue <-chan interface{}, encode func(w io.Writer,
 	}
 }
 
+// Encode a collection from a channel. Supports both list and dictionary.
 func encodeCollection(w io.Writer, first interface{}, rest <-chan interface{}) {
 	switch ft := first.(type) {
 	case EmptyList, *EmptyList:
@@ -62,12 +75,12 @@ func encodeCollection(w io.Writer, first interface{}, rest <-chan interface{}) {
 	case *KeyedItem:
 		w.Write([]byte("{"))
 		encodeDictionaryItem(w, ft)
-		concatQueue(w, rest, encodeDictionaryItem)
+		appendCollectionItems(w, rest, encodeDictionaryItem)
 		w.Write([]byte("}"))
 	default:
 		w.Write([]byte("["))
 		encodeItem(w, ft)
-		concatQueue(w, rest, encodeItem)
+		appendCollectionItems(w, rest, encodeItem)
 		w.Write([]byte("]"))
 	}
 }
@@ -82,7 +95,8 @@ func StreamEncodeJSON(w io.Writer, elements []interface{}) error {
 
 	// initialize.
 	// collect the first items of potential streams and complain if there is
-	// an error.
+	// an error. An error in the first collection element will terminate
+	// the encoder.
 	for i, ei := range elements {
 		switch element := ei.(type) {
 		case <-chan interface{}:

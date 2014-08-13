@@ -6,21 +6,29 @@ var selmarker = L.icon({
     iconUrl : '/script/leaflet/images/marker-icon-sel.png'
 })
 
-function create_place_div(p) {
+function create_place_div(place, layerid) {
     d = document.createElement("div")
     d.setAttribute("class", "place")
-    d.setAttribute("placeid", p.Id)
+    d.setAttribute("layerid", layerid)
     a = document.createElement("a")
-    a.setAttribute("href", "/places/" + p.Name)
-    a.appendChild(document.createTextNode(p.Name))
+    a.setAttribute("href", "/places/" + place.Name)
+    a.appendChild(document.createTextNode(place.Name))
     d.appendChild(a)
     return d
+}
+
+function create_availability_div(item, layerid) {
+    d = document.createElement("div")
+    d.setAttribute("class", "place")
+    d.setAttribute("layerid", layerid)
+    d.appendChild(document.createTextNode(item.Description))
+    return d    
 }
 
 function fetch_locations() {
     var b = map.getBounds()
     
-    $.getJSON('/api/places',
+    $.getJSON('/api/stuff_at',
               {"minlat"  : b.getSouthWest().lat,
                "minlong" : b.getSouthWest().lng,
                "maxlat"  : b.getNorthEast().lat,
@@ -33,22 +41,32 @@ function fetch_locations() {
                   pl.empty()
 
                   for (var i = 0; i < json.length; i++) {
-                      p = json[i]
-
-                      // 1: add to place list
-                      pl.append(create_place_div(p))
+                      var item = json[i]
+                      var place
+                      var layerid = item.Type + item.Id
+                      if (item['Type'] == 'place') {
+                          place = item
+                          pl.append(create_place_div(item, layerid))
+                      } else {
+                          /* BUG: should only show places on the map. This
+                             way places will be added more than one time
+                          */
+                          place = item['Place']
+                          pl.append(create_availability_div(item, layerid))
+                      }
 
                       // 2: add to map
-                      if (p.Id in oldlayers) {
-                          plotlayers[p.Id] = oldlayers[p.Id]
-                          delete oldlayers[p.Id]
+                      if (layerid in oldlayers) {
+                          plotlayers[layerid] = oldlayers[layerid]
+                          delete oldlayers[layerid]
                       } else {
                           // only new listings are added here, so
                           // we could display an effect
-                          m = new L.Marker(new L.LatLng(p.Lat, p.Long))
+                          console.log(place)
+                          m = new L.Marker(new L.LatLng(place.Lat, place.Long))
                           map.addLayer(m)
-                          m.bindPopup(p.Name)
-                          plotlayers[p.Id] = m
+                          m.bindPopup(place.Name)
+                          plotlayers[layerid] = m
                       }
                   }
 
@@ -99,13 +117,13 @@ window.onload = function() {
 
 
     $("#places").on("mouseover", ".place", function(e) {
-        placeid = $(this).context.getAttribute("placeid")
-        m = plotlayers[placeid]
+        layerid = $(this).context.getAttribute("layerid")
+        m = plotlayers[layerid]
         m.setIcon(selmarker)
     })
     $("#places").on("mouseout", ".place", function(e) {
-        placeid = $(this).context.getAttribute("placeid")
-        m = plotlayers[placeid]
+        layerid = $(this).context.getAttribute("layerid")
+        m = plotlayers[layerid]
         m.setIcon(new L.Icon.Default())
     })
 

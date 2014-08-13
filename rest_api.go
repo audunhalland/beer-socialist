@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
 )
 
 const queueBufferSize = 0
@@ -135,7 +136,7 @@ func getFormFloat(m url.Values, key string) (float64, error) {
 }
 
 func getRectangle(ctx *DispatchContext) (*Rectangle, error) {
-	r := new(Rectangle)
+	r := &Rectangle{}
 	var err error
 	keys := []string{"minlat", "minlong", "maxlat", "maxlong"}
 	targets := []*float64{&r.MinLat, &r.MinLong, &r.MaxLat, &r.MaxLong}
@@ -193,7 +194,7 @@ func InitRestTree() {
 				"place_address.addressid = address.id "},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
 			row := stmts[0].QueryRow(ctx.param[0])
-			place := new(Place)
+			place := &Place{Type: "place"}
 			if err := row.Scan(place.BasicFields()...); err != nil {
 				return err
 			} else {
@@ -204,7 +205,7 @@ func InitRestTree() {
 					fmt.Println(err)
 				} else {
 					for addrrows.Next() {
-						addr := new(Address)
+						addr := &Address{}
 						addrrows.Scan(addr.BasicFields()...)
 						place.Address = append(place.Address, addr)
 					}
@@ -229,7 +230,7 @@ func InitRestTree() {
 				return err
 			}
 			for rows.Next() {
-				place := new(Place)
+				place := &Place{Type: "place"}
 				err := rows.Scan(place.BasicFields()...)
 				if err != nil {
 					return err
@@ -239,11 +240,71 @@ func InitRestTree() {
 			return nil
 		})
 
+	installStreamHandler("stuff_at",
+		[]string{
+			"SELECT id, name, lat, long, radius FROM place WHERE " +
+				"lat > ? AND lat < ? AND long > ? AND long < ?",
+			"SELECT availability.id, availability.description, " +
+				"place.id, place.name, place.lat, place.long, place.radius " +
+				"FROM availability, place " +
+				"WHERE availability.placeid = place.id AND " +
+				"place.lat > ? AND place.lat < ? AND place.long > ? and place.long < ?"},
+		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
+			rect, err := getRectangle(ctx)
+			if err != nil {
+				return err
+			}
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+
+			/* 1st statement */
+			go func() {
+				rows, err := stmts[0].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
+				if err != nil {
+					queue <- err
+					return
+				}
+				for rows.Next() {
+					place := &Place{Type: "place"}
+					if err := rows.Scan(place.BasicFields()...); err != nil {
+						queue <- err
+						return
+					} else {
+						queue <- place
+					}
+				}
+				wg.Done()
+			}()
+
+			/* 2nd statement */
+			go func() {
+				rows, err := stmts[1].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
+				if err != nil {
+					queue <- err
+					return
+				}
+				for rows.Next() {
+					a := &Availability{Type: "availability"}
+					if err := rows.Scan(ConcatBasicFields(a, &a.Place)...); err != nil {
+						queue <- err
+						return
+					} else {
+						queue <- a
+					}
+				}
+				wg.Done()
+			}()
+
+			wg.Wait()
+			return nil
+		})
+
 	installStmtRestHandler("meeting/:id",
 		[]string{"SELECT id, ownerid, name FROM meeting WHERE id = ?"},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
 			row := stmts[0].QueryRow(ctx.param[0])
-			meeting := new(Meeting)
+			meeting := &Meeting{Type: "meeting"}
 			if err := row.Scan(meeting.BasicFields()...); err != nil {
 				return err
 			} else {
@@ -271,7 +332,7 @@ func InitRestTree() {
 				return err
 			}
 			for rows.Next() {
-				a := new(Availability)
+				a := &Availability{Type: "availability"}
 				err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...)
 				if err != nil {
 					return err
@@ -300,7 +361,7 @@ func InitRestTree() {
 				return err
 			}
 			for rows.Next() {
-				m := new(Meeting)
+				m := &Meeting{Type: "meeting"}
 				var partid int
 				err := rows.Scan(append(ConcatBasicFields(m, &m.Place, &m.Period), &partid)...)
 				if err != nil {
@@ -331,7 +392,7 @@ func InitRestTree() {
 			}
 
 			for rows.Next() {
-				s := new(Suggestion)
+				s := &Suggestion{}
 				err := rows.Scan(&s.Value, &s.Data)
 				if err != nil {
 					return err
