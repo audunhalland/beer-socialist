@@ -65,7 +65,7 @@ func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRe
 }
 
 // Function type for api calls returning a list of objects
-type producer func(*DispatchContext, []*sql.Stmt, chan<- interface{}) error
+type itemProducer func(*DispatchContext, []*sql.Stmt, chan<- interface{}) error
 
 // A REST handler with prepared statements and a producer function
 type streamRestHandler struct {
@@ -74,7 +74,7 @@ type streamRestHandler struct {
 	stmts    []*sql.Stmt
 }
 
-func makeProdQueue(ctx *DispatchContext, stmts []*sql.Stmt, p producer) <-chan interface{} {
+func makeItemQueue(ctx *DispatchContext, stmts []*sql.Stmt, p itemProducer) <-chan interface{} {
 	queue := make(chan interface{}, queueBufferSize)
 
 	go func() {
@@ -94,7 +94,7 @@ func (h *streamRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWrite
 	for i, e := range h.elements {
 		switch element := e.(type) {
 		case func(*DispatchContext, []*sql.Stmt, chan<- interface{}) error:
-			mappedElements[i] = makeProdQueue(ctx, h.stmts, element)
+			mappedElements[i] = makeItemQueue(ctx, h.stmts, element)
 		default:
 			mappedElements[i] = element
 		}
@@ -149,6 +149,41 @@ func getRectangle(ctx *DispatchContext) (*Rectangle, error) {
 }
 
 func InitRestTree() {
+	installStreamHandler("userpref",
+		[]string{
+			"SELECT key, value FROM user_preference WHERE ownerid = ?",
+			"SELECT value FROM user_preference WHERE ownerid = ? AND key = ?"},
+		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
+			count := 0
+			if len(ctx.request.Form["q"]) == 0 {
+				rows, err := stmts[0].Query(ctx.userid)
+				if err != nil {
+					return err
+				}
+				for rows.Next() {
+					var key string
+					var val interface{}
+					if err := rows.Scan(&key, &val); err == nil {
+						queue <- &KeyedItem{key, val}
+						count++
+					}
+				}
+			} else {
+				for _, p := range ctx.request.Form["q"] {
+					row := stmts[1].QueryRow(ctx.userid, p)
+					var val interface{}
+					if err := row.Scan(&val); err == nil {
+						queue <- &KeyedItem{p, val}
+						count++
+					}
+				}
+			}
+			if count == 0 {
+				queue <- &EmptyDictionary{}
+			}
+			return nil
+		})
+
 	installStmtRestHandler("place/:id",
 		[]string{
 			"SELECT id, name, lat, long, radius FROM place WHERE id = ?",

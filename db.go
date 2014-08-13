@@ -103,6 +103,13 @@ var init_queries = [...]string{
 		"login TEXT, " +
 		"email TEXT " +
 		")",
+	"CREATE TABLE IF NOT EXISTS user_preference (" +
+		"ownerid INTEGER NOT NULL, " +
+		"key TEXT NOT NULL, " +
+		"value, " +
+		"FOREIGN KEY(ownerid) REFERENCES user(id)" +
+		"PRIMARY KEY(ownerid, key)" +
+		")",
 	"CREATE TABLE IF NOT EXISTS participant (" +
 		"id INTEGER PRIMARY KEY, " +
 		"ownerid INTEGER NOT NULL, " +
@@ -121,7 +128,7 @@ var init_queries = [...]string{
 		"periodid INTEGER NOT NULL, " +
 		"placeid INTEGER NOT NULL, " +
 		"name TEXT, " +
-		"FOREIGN KEY(ownerid) REFERENCES user(id)" +
+		"FOREIGN KEY(ownerid) REFERENCES user(id), " +
 		"FOREIGN KEY(periodid) REFERENCES period(id)" +
 		")",
 	"CREATE TABLE IF NOT EXISTS place (" +
@@ -180,7 +187,7 @@ var init_queries = [...]string{
 	"CREATE TABLE IF NOT EXISTS dynamic_url (" +
 		"value TEXT PRIMARY KEY NOT NULL, " +
 		"type INTEGER NOT NULL, " +
-		"foreignid INTEGER NOT NULL, " +
+		"foreignid INTEGER NOT NULL " +
 		")",
 }
 

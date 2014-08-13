@@ -20,6 +20,8 @@ func TestRestGetError(t *testing.T) {
 		expect string
 	}
 	l := []Expect{
+		{"userpref", "dict"},
+		{"userpref?q=homelat", "dict"},
 		{"place/1", "dict"},
 		{"places", "error"}, /* missing bounding box */
 		{"places?minlat=abcde", "error"},

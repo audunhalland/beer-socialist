@@ -142,6 +142,7 @@ func PopulateRandom() {
 	rc.db.Begin()
 
 	user := rc.table(iq("user", []string{"alias", "login", "email"}))
+	userpref := rc.table(iq("user_preference", []string{"ownerid", "key", "value"}))
 	place := rc.table(iq("place", []string{"name", "lat", "long", "radius"}))
 	part := rc.table(iq("participant", []string{"ownerid", "alias", "description"}))
 	period := rc.table(iq("period", []string{"start", "end"}))
@@ -154,6 +155,12 @@ func PopulateRandom() {
 
 	for i := 0; i < 20; i++ {
 		user.put(randName(), "login", "test@mail.com")
+	}
+
+	for i := 0; i < 20; i++ {
+		/* hack for now */
+		userpref.put(user.ids[i], "homelat", 59.95)
+		userpref.put(user.ids[i], "homelong", 10.75)
 	}
 
 	for i := 0; i < 50; i++ {

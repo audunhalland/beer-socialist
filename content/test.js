@@ -62,8 +62,8 @@ function fetch_locations() {
 function initmap() {
     map = new L.map('beermap')
 
-    var osmUrl = 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-    var osmAttrib = 'Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors'
+    var osmUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    var osmAttrib = 'Map data © <a href="https://openstreetmap.org">OpenStreetMap</a> contributors'
 
     var osm = new L.TileLayer(osmUrl, {minZoom : 8, maxZoom : 20, attribution : osmAttrib});
     map.addLayer(osm)
@@ -78,9 +78,9 @@ function formatdate(unix) {
 window.onload = function() {
     initmap()
 
-    $.getJSON('/json/homecoord', '',
+    $.getJSON('/api/userpref?q=homelat&q=homelong', '',
               function(json) {
-                  map.setView(new L.LatLng(json[0], json[1]), 11)
+                  map.setView(new L.LatLng(json["homelat"], json["homelong"]), 11)
               })
 
     $.getJSON('/api/availability', '',

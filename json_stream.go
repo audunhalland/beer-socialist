@@ -6,12 +6,69 @@ import (
 	"io"
 )
 
-func encode(w io.Writer, o interface{}) {
+type KeyedItem struct {
+	key   string
+	value interface{}
+}
+
+type EmptyList struct{}
+type EmptyDictionary struct{}
+
+func encodeItem(w io.Writer, o interface{}) error {
 	bytes, err := json.Marshal(o)
 	if err != nil {
-		fmt.Println(err)
+		return err
 	} else {
 		w.Write(bytes)
+		return nil
+	}
+}
+
+func encodeDictionaryItem(w io.Writer, o interface{}) error {
+	switch ot := o.(type) {
+	case *KeyedItem:
+		encodeItem(w, ot.key)
+		w.Write([]byte(":"))
+		encodeItem(w, ot.value)
+		return nil
+	case KeyedItem:
+		encodeItem(w, ot.key)
+		w.Write([]byte(":"))
+		encodeItem(w, ot.value)
+		return nil
+	default:
+		encodeItem(w, "error")
+		w.Write([]byte(":"))
+		encodeItem(w, "error")
+		return fmt.Errorf("not a keyed item")
+	}
+}
+
+func concatQueue(w io.Writer, queue <-chan interface{}, encode func(w io.Writer, o interface{}) error) {
+	for e := range queue {
+		w.Write([]byte(","))
+		if encode(w, e) != nil {
+			return
+		}
+	}
+}
+
+func encodeCollection(w io.Writer, first interface{}, rest <-chan interface{}) {
+	switch ft := first.(type) {
+	case EmptyList, *EmptyList:
+		w.Write([]byte("[]"))
+	case EmptyDictionary, *EmptyDictionary:
+		w.Write([]byte("{}"))
+	case *KeyedItem:
+		w.Write([]byte("{"))
+		encodeDictionaryItem(w, ft)
+		concatQueue(w, rest, encodeDictionaryItem)
+		w.Write([]byte("}"))
+	default:
+		w.Write([]byte("["))
+		encodeItem(w, ft)
+		concatQueue(w, rest, encodeItem)
+		w.Write([]byte("]"))
 	}
 }
 
@@ -52,23 +109,15 @@ func StreamEncodeJSON(w io.Writer, elements []interface{}) error {
 			first, exists := firstElementMap[i]
 
 			if exists {
-				w.Write([]byte("["))
-				encode(w, first)
 				delete(firstElementMap, i)
-
-				for e := range element {
-					w.Write([]byte(","))
-					encode(w, e)
-				}
-
-				w.Write([]byte("]"))
+				encodeCollection(w, first, element)
 			} else {
-				// empty
+				// No items: default to empty list
 				w.Write([]byte("[]"))
 			}
 
 		default:
-			encode(w, element)
+			encodeItem(w, element)
 		}
 	}
 
