@@ -36,20 +36,6 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func jsonHandler(w http.ResponseWriter, r *http.Request) {
-	var data []byte
-	var err error
-	switch r.URL.Path {
-	case "/json/homecoord":
-		data, err = json.Marshal([2]float64{59.95, 10.75})
-	}
-	if err != nil {
-		/* some error */
-	} else {
-		w.Write(data)
-	}
-}
-
 func installTemplateHandler(prefix string, content_type string) {
 	http.HandleFunc(prefix,
 		func(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +60,6 @@ func StartHttp() {
 	http.HandleFunc("/api/", HandleRestRequest)
 
 	http.HandleFunc("/", defaultHandler)
-	http.HandleFunc("/json/", jsonHandler)
 
 	addr := ":" + strconv.FormatInt(int64(GlobalEnv.ServerPort), 10)
 	var err error

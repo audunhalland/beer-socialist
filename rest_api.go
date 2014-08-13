@@ -128,7 +128,7 @@ func getFormFloat(m url.Values, key string) (float64, error) {
 	}
 	f, err := strconv.ParseFloat(val[0], 64)
 	if err != nil {
-		return 0.0, err
+		return 0.0, fmt.Errorf("could not parse number: %s", val[0])
 	} else {
 		return f, nil
 	}

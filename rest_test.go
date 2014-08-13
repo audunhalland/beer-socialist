@@ -22,12 +22,13 @@ func TestRestGetError(t *testing.T) {
 	l := []Expect{
 		{"place/1", "dict"},
 		{"places", "error"}, /* missing bounding box */
-		{"places?minlat=0&minlong=0&maxlat=0&maxlong=0", "list"},
+		{"places?minlat=abcde", "error"},
+		{"places?minlat=-90&minlong=-180&maxlat=90&maxlong=180", "list"},
 		{"meeting/1", "dict"},
 		{"availability", "list"},
 		{"meetings", "list"},
-		{"placesearch", "error"},        /* missing query */
-		{"placesearch?query=a", "dict"}} /* missing query */
+		{"placesearch", "error"}, /* missing query */
+		{"placesearch?query=a", "dict"}}
 
 	OpenTestEnv()
 	defer CloseTestEnv()
