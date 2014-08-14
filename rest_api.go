@@ -149,6 +149,47 @@ func getRectangle(ctx *DispatchContext) (*Rectangle, error) {
 	return r, nil
 }
 
+// Align and merge channels so that all inputs will produce one element each
+// before continuing the merge.
+// If an error occurs during the align, stop the whole process
+func alignChannels(output chan<- interface{}, inputs ...<-chan interface{}) {
+	// alignment buffer
+	aligned := make([]interface{}, len(inputs))
+
+	// align
+	for i, ch := range inputs {
+		switch item := (<-ch).(type) {
+		case error:
+			output <- item
+			return
+		default:
+			aligned[i] = item
+		}
+	}
+
+	// flush aligned items
+	for _, item := range aligned {
+		output <- item
+	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(inputs))
+
+	pipe := func(ch <-chan interface{}) {
+		for item := range ch {
+			output <- item
+		}
+		wg.Done()
+	}
+
+	// merge remaining
+	for _, ch := range inputs {
+		go pipe(ch)
+	}
+
+	wg.Wait()
+}
+
 func InitRestTree() {
 	installStreamHandler("userpref",
 		[]string{
@@ -245,58 +286,63 @@ func InitRestTree() {
 			"SELECT id, name, lat, long, radius FROM place WHERE " +
 				"lat > ? AND lat < ? AND long > ? AND long < ?",
 			"SELECT availability.id, availability.description, " +
-				"place.id, place.name, place.lat, place.long, place.radius " +
-				"FROM availability, place " +
-				"WHERE availability.placeid = place.id AND " +
-				"place.lat > ? AND place.lat < ? AND place.long > ? and place.long < ?"},
+				"participant.id, participant.alias, participant.description, " +
+				"place.id, place.name, place.lat, place.long, place.radius, " +
+				"period.start, period.end " +
+				"FROM availability, participant, place, period " +
+				"WHERE " +
+				"availability.partid = participant.id AND " +
+				"availability.placeid = place.id AND " +
+				"place.lat > ? AND place.lat < ? AND place.long > ? and place.long < ? AND " +
+				"availability.periodid = period.id"},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
 			rect, err := getRectangle(ctx)
 			if err != nil {
 				return err
 			}
 
-			var wg sync.WaitGroup
-			wg.Add(2)
+			ch1 := make(chan interface{}, queueBufferSize)
+			ch2 := make(chan interface{}, queueBufferSize)
 
 			/* 1st statement */
 			go func() {
+				defer close(ch1)
 				rows, err := stmts[0].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
 				if err != nil {
-					queue <- err
+					ch1 <- err
 					return
 				}
 				for rows.Next() {
 					place := &Place{Type: "place"}
 					if err := rows.Scan(place.BasicFields()...); err != nil {
-						queue <- err
+						ch1 <- err
 						return
 					} else {
-						queue <- place
+						ch1 <- place
 					}
 				}
-				wg.Done()
 			}()
 
 			/* 2nd statement */
 			go func() {
+				defer close(ch2)
 				rows, err := stmts[1].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
 				if err != nil {
-					queue <- err
+					ch2 <- err
 					return
 				}
 				for rows.Next() {
 					a := &Availability{Type: "availability"}
-					if err := rows.Scan(ConcatBasicFields(a, &a.Place)...); err != nil {
-						queue <- err
+					if err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...); err != nil {
+						ch2 <- err
 						return
 					} else {
-						queue <- a
+						ch2 <- a
 					}
 				}
-				wg.Done()
 			}()
 
-			wg.Wait()
+			alignChannels(queue, ch1, ch2)
 			return nil
 		})
 
@@ -317,7 +363,7 @@ func InitRestTree() {
 	installStreamHandler("availability",
 		[]string{
 			"SELECT availability.id, availability.description," +
-				"participant.alias, participant.description, " +
+				"participant.id, participant.alias, participant.description, " +
 				"place.id, place.name, place.lat, place.long, place.radius, " +
 				"period.start, period.end " +
 				"FROM availability, participant, place, period " +

@@ -72,12 +72,13 @@ func (a *Availability) BasicFields() []interface{} {
 
 // In memory representation: Participant
 type Participant struct {
+	Id          int64
 	Alias       string
 	Description string
 }
 
 func (p *Participant) BasicFields() []interface{} {
-	return []interface{}{&p.Alias, &p.Description}
+	return []interface{}{&p.Id, &p.Alias, &p.Description}
 }
 
 // In memory representation: Period
