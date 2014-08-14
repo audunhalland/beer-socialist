@@ -1,28 +1,47 @@
 
 var map
 var plotlayers = {}
+var place_assoc = {}
+var avails = {}
 
 var selmarker = L.icon({
     iconUrl : '/script/leaflet/images/marker-icon-sel.png'
 })
 
-function create_place_div(place, layerid) {
-    d = document.createElement("div")
-    d.setAttribute("class", "place")
-    d.setAttribute("layerid", layerid)
-    a = document.createElement("a")
-    a.setAttribute("href", "/places/" + place.Name)
-    a.appendChild(document.createTextNode(place.Name))
-    d.appendChild(a)
-    return d
+function add_place(place) {
+    // only new listings are added here, so
+    // we could display an effect
+    m = new L.Marker(new L.LatLng(place.Lat, place.Long))
+    map.addLayer(m)
+    m.bindPopup(place.Name)
+    plotlayers[place.Id] = m
 }
 
-function create_availability_div(item, layerid) {
-    d = document.createElement("div")
-    d.setAttribute("class", "place")
-    d.setAttribute("layerid", layerid)
-    d.appendChild(document.createTextNode(item.Description))
-    return d    
+function add_avail(avail) {
+    var place = avail.Place
+
+    if (place.Id in place_assoc) {
+        place_assoc[place.Id].push(avail)
+    } else {
+        place_assoc[place.Id] = [avail]
+    }
+
+    avails[avail.Id] = avail
+
+    var d = document.createElement("div")
+    d.setAttribute("class", "avail")
+    d.setAttribute("avail_id", avail.Id)
+    d.appendChild(document.createTextNode(avail.Participant.Alias + "@" + avail.Place.Name))
+    $("#places").append(d)
+}
+
+function map_highlight(placeid, enabled) {
+    m = plotlayers[placeid]
+    if (enabled) {
+        m.setIcon(selmarker)
+    } else {
+        m.setIcon(new L.Icon.Default())
+    }
 }
 
 function fetch_locations() {
@@ -37,36 +56,21 @@ function fetch_locations() {
               function(json) {
                   oldlayers = plotlayers
                   plotlayers = {}
+                  place_assoc = {}
                   pl = $("#places")
                   pl.empty()
 
                   for (var i = 0; i < json.length; i++) {
                       var item = json[i]
-                      var place
-                      var layerid = item.Type + item.Id
                       if (item['Type'] == 'place') {
-                          place = item
-                          pl.append(create_place_div(item, layerid))
+                          if (item.Id in oldlayers) {
+                              plotlayers[item.Id] = oldlayers[item.Id]
+                              delete oldlayers[item.Id]
+                          } else {
+                              add_place(item)
+                          }
                       } else {
-                          /* BUG: should only show places on the map. This
-                             way places will be added more than one time
-                          */
-                          place = item['Place']
-                          pl.append(create_availability_div(item, layerid))
-                      }
-
-                      // 2: add to map
-                      if (layerid in oldlayers) {
-                          plotlayers[layerid] = oldlayers[layerid]
-                          delete oldlayers[layerid]
-                      } else {
-                          // only new listings are added here, so
-                          // we could display an effect
-                          console.log(place)
-                          m = new L.Marker(new L.LatLng(place.Lat, place.Long))
-                          map.addLayer(m)
-                          m.bindPopup(place.Name)
-                          plotlayers[layerid] = m
+                          add_avail(item)
                       }
                   }
 
@@ -116,15 +120,13 @@ window.onload = function() {
               })
 
 
-    $("#places").on("mouseover", ".place", function(e) {
-        layerid = $(this).context.getAttribute("layerid")
-        m = plotlayers[layerid]
-        m.setIcon(selmarker)
+    $("#places").on("mouseover", ".avail", function(e) {
+        avail = avails[$(this).context.getAttribute("avail_id")]
+        map_highlight(avail.Place.Id, true)
     })
-    $("#places").on("mouseout", ".place", function(e) {
-        layerid = $(this).context.getAttribute("layerid")
-        m = plotlayers[layerid]
-        m.setIcon(new L.Icon.Default())
+    $("#places").on("mouseout", ".avail", function(e) {
+        avail = avails[$(this).context.getAttribute("avail_id")]
+        map_highlight(avail.Place.Id, false)
     })
 
     fetch_locations()
