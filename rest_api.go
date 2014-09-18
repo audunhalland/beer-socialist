@@ -5,19 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strconv"
 	"sync"
 )
 
 const queueBufferSize = 0
-
-type Rectangle struct {
-	MinLat  float64
-	MinLong float64
-	MaxLat  float64
-	MaxLong float64
-}
 
 func jsonError(w http.ResponseWriter, err error) {
 	w.WriteHeader(400)
@@ -38,24 +29,24 @@ func compileStatements(q []string) ([]*sql.Stmt, error) {
 }
 
 // Type of the function use to handle REST requests based on one sql statement
-type stmtRestFunc func(*DispatchContext, []*sql.Stmt, http.ResponseWriter) error
+type StmtRestFunc func(*DispatchContext, []*sql.Stmt, http.ResponseWriter) error
 
 // A REST handler with prepared statements and a handler function
-type stmtRestHandler struct {
+type StmtRestHandler struct {
 	LeafDispatcher
-	fn    stmtRestFunc
+	fn    StmtRestFunc
 	stmts []*sql.Stmt
 }
 
-func (h *stmtRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
+func (h *StmtRestHandler) ServeREST(ctx *DispatchContext, w http.ResponseWriter, r *http.Request) {
 	err := h.fn(ctx, h.stmts, w)
 	if err != nil {
 		jsonError(w, err)
 	}
 }
 
-func installStmtRestHandler(pathPattern string, queryStrings []string, fn stmtRestFunc) {
-	handler := new(stmtRestHandler)
+func installStmtRestHandler(pathPattern string, queryStrings []string, fn StmtRestFunc) {
+	handler := new(StmtRestHandler)
 	var err error
 	handler.fn = fn
 	handler.stmts, err = compileStatements(queryStrings)
@@ -120,33 +111,6 @@ func installStreamHandler(pathPattern string, queryStrings []string, streamEleme
 	if err == nil {
 		InstallRestHandler(pathPattern, handler)
 	}
-}
-
-func getFormFloat(m url.Values, key string) (float64, error) {
-	val, ok := m[key]
-	if !ok {
-		return 0.0, fmt.Errorf("missing key %s", key)
-	}
-	f, err := strconv.ParseFloat(val[0], 64)
-	if err != nil {
-		return 0.0, fmt.Errorf("could not parse number: %s", val[0])
-	} else {
-		return f, nil
-	}
-}
-
-func getRectangle(ctx *DispatchContext) (*Rectangle, error) {
-	r := &Rectangle{}
-	var err error
-	keys := []string{"minlat", "minlong", "maxlat", "maxlong"}
-	targets := []*float64{&r.MinLat, &r.MinLong, &r.MaxLat, &r.MaxLong}
-	for i, t := range targets {
-		*t, err = getFormFloat(ctx.request.Form, keys[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return r, nil
 }
 
 // Align and merge channels so that all inputs will produce one element each
@@ -262,7 +226,7 @@ func InitRestTree() {
 			"SELECT id, name, lat, long, radius FROM place WHERE " +
 				"lat > ? AND lat < ? AND long > ? AND long < ?"},
 		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
-			rect, err := getRectangle(ctx)
+			rect, err := GetRectangle(ctx)
 			if err != nil {
 				return err
 			}
@@ -281,7 +245,7 @@ func InitRestTree() {
 			return nil
 		})
 
-	installStreamHandler("stuff_at",
+	installStmtRestHandler("stuff_at",
 		[]string{
 			"SELECT id, name, lat, long, radius FROM place WHERE " +
 				"lat > ? AND lat < ? AND long > ? AND long < ?",
@@ -295,54 +259,53 @@ func InitRestTree() {
 				"availability.placeid = place.id AND " +
 				"place.lat > ? AND place.lat < ? AND place.long > ? and place.long < ? AND " +
 				"availability.periodid = period.id"},
-		func(ctx *DispatchContext, stmts []*sql.Stmt, queue chan<- interface{}) error {
-			rect, err := getRectangle(ctx)
+		func(ctx *DispatchContext, stmts []*sql.Stmt, w http.ResponseWriter) error {
+			rect, err := GetRectangle(ctx)
 			if err != nil {
 				return err
 			}
 
-			ch1 := make(chan interface{}, queueBufferSize)
-			ch2 := make(chan interface{}, queueBufferSize)
-
-			/* 1st statement */
-			go func() {
-				defer close(ch1)
-				rows, err := stmts[0].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
-				if err != nil {
-					ch1 <- err
-					return
-				}
-				for rows.Next() {
-					place := &Place{Type: "place"}
-					if err := rows.Scan(place.BasicFields()...); err != nil {
-						ch1 <- err
-						return
-					} else {
-						ch1 <- place
+			items, err := Multiplex(queueBufferSize,
+				func(out chan<- interface{}) error {
+					fmt.Println("stmt1")
+					rows, err := stmts[0].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
+					if err != nil {
+						return err
 					}
-				}
-			}()
-
-			/* 2nd statement */
-			go func() {
-				defer close(ch2)
-				rows, err := stmts[1].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
-				if err != nil {
-					ch2 <- err
-					return
-				}
-				for rows.Next() {
-					a := &Availability{Type: "availability"}
-					if err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...); err != nil {
-						ch2 <- err
-						return
-					} else {
-						ch2 <- a
+					for rows.Next() {
+						place := &Place{Type: "place"}
+						if err := rows.Scan(place.BasicFields()...); err != nil {
+							out <- err
+						} else {
+							fmt.Println("stmt1 item")
+							out <- place
+						}
 					}
-				}
-			}()
+					return nil
+				},
+				func(out chan<- interface{}) error {
+					fmt.Println("stmt2")
+					rows, err := stmts[1].Query(rect.MinLat, rect.MaxLat, rect.MinLong, rect.MaxLong)
+					if err != nil {
+						return err
+					}
+					for rows.Next() {
+						a := &Availability{Type: "availability"}
+						if err := rows.Scan(ConcatBasicFields(a, &a.Participant, &a.Place, &a.Period)...); err != nil {
+							out <- err
+						} else {
+							fmt.Println("stmt2 item")
+							out <- a
+						}
+					}
+					return nil
+				})
 
-			alignChannels(queue, ch1, ch2)
+			if err != nil {
+				return err
+			}
+
+			WriteChannelAsJSONList(w, items)
 			return nil
 		})
 

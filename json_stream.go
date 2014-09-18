@@ -137,3 +137,18 @@ func StreamEncodeJSON(w io.Writer, elements []interface{}) error {
 
 	return nil
 }
+
+func WriteChannelAsJSONList(w io.Writer, items <-chan interface{}) {
+	w.Write([]byte("["))
+	if item, ok := <-items; ok {
+		encodeItem(w, item)
+		for item := range items {
+			w.Write([]byte(","))
+			if err := encodeItem(w, item); err != nil {
+				w.Write([]byte("null"))
+				break
+			}
+		}
+	}
+	w.Write([]byte("]"))
+}
