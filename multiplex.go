@@ -6,6 +6,10 @@ import (
 
 type Multiplexable func(out chan<- interface{}) error
 
+// Generically multiplex several "producer" functions
+// with proper error handling, meaning that the function
+// blocks until all producers have successfully started
+// producing, or at least one has failed to initialize.
 func Multiplex(bufsize int, fns ...Multiplexable) (<-chan interface{}, error) {
 	out := make(chan interface{}, bufsize)
 	cancel := make(chan struct{}, 0)
@@ -88,4 +92,49 @@ func Multiplex(bufsize int, fns ...Multiplexable) (<-chan interface{}, error) {
 	}
 
 	return out, nil
+}
+
+// "Uniplex" - singular version of the multiplexer, which is simpler, uses
+// less resources and has an identical type of error system.
+//
+// I have come to the conclusion that using a single channel for this
+// is theoretically impossible:
+// It is possible to read the first item and then put it back, but that
+// would ruin the order of items.
+//
+// The reason for this problem is the complexity of capturing the event
+// that a producer function does*not*return before a specific point, an event
+// which in itself is a non-event - so we need to use the point instead.
+func Uniplex(bufsize int, fn Multiplexable) (<-chan interface{}, error) {
+	inner := make(chan interface{}, bufsize)
+	outer := make(chan interface{}, bufsize)
+	ec := make(chan error, 0)
+
+	go func() {
+		if err := fn(inner); err != nil {
+			ec <- err
+		}
+		close(inner)
+	}()
+
+	select {
+	case err := <-ec:
+		return nil, err
+	case item, ok := <-inner:
+		if ok {
+			// just forward all items to outer channel
+			go func() {
+				outer <- item
+				for item := range inner {
+					outer <- item
+				}
+				close(outer)
+			}()
+
+		} else {
+			close(outer)
+		}
+
+		return outer, nil
+	}
 }

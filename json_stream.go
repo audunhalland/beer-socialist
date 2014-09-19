@@ -152,3 +152,15 @@ func WriteChannelAsJSONList(w io.Writer, items <-chan interface{}) {
 	}
 	w.Write([]byte("]"))
 }
+
+func WriteChannelAsJSONDictionary(w io.Writer, items <-chan interface{}) {
+	w.Write([]byte("{"))
+	if item, ok := <-items; ok {
+		encodeDictionaryItem(w, item)
+		for item := range items {
+			w.Write([]byte(","))
+			encodeDictionaryItem(w, item)
+		}
+	}
+	w.Write([]byte("}"))
+}
